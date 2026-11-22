@@ -75,6 +75,7 @@ function buildBoard(cats) {
 const HEADS = ['🦊', '🐼', '🐸', '🦄', '🐯', '🐙', '👽', '🤖', '🐻', '🐵', '🐶', '🐱', '🐷', '🐰', '🐨', '🦁', '🐔', '🐧', '🦉', '🐢',
   '😎', '🤓', '😜', '🥸', '🤠', '😈', '👻', '💀', '🤡', '👑', '🎃', '🌝', '🍑', '🍆', '🌶️', '🍕', '🍩', '🥑', '🦖', '🧠', '👸', '🤴', '🧜‍♀️', '🧛', '🥷', '🧙'];
 const COLORS = ['#ff2e88', '#22d3ff', '#a3ff3c', '#ffd60a', '#ff9f1c', '#b06cff', '#ff4d6d', '#1de9b6'];
+const BOT_TEXTS = ['Beep boop, ich hab keine Ahnung 🤖', 'Ein Toaster mit Gefühlen', 'Error 404: Witz nicht gefunden', 'Socken. Immer Socken.', 'Das sag ich nur meinem Akku', 'Ein Pinguin namens Klaus', 'Mama Robo wäre stolz', 'Strg + Lachen'];
 const LUCK = [
   { id: 'plus', l: '+150 Punkte 🎁' }, { id: 'steal', l: 'Klau 100 Punkte 🦹' }, { id: 'swap', l: 'Platztausch 🔄' },
   { id: 'vault', l: 'Teleport zum Tresor 🌀' }, { id: 'key', l: 'Gratis-Schlüssel 🔑' }, { id: 'again', l: 'Nochmal würfeln 🎲' },
@@ -100,6 +101,7 @@ function saveProfile() { store.set('kn_profile', { name: P.name, head: P.head, b
 const STATS0 = { games: 0, wins: 0, losses: 0, draws: 0, points: 0, best: 0, right: 0, ans: 0, crowns: 0, laughs: 0, bruller: 0, cat: {}, vs: {}, recent: [], done: [] };
 function loadStats() { return Object.assign({}, STATS0, store.get('kn_stats', {})); }
 function recordGame(s, me) {
+  if (s.code === 'BOT') return; // Übungsspiele zählen nicht
   const st = loadStats();
   if (st.done.includes(s.gameId)) return;
   const pl = s.players[me], op = s.players[1 - me];
@@ -276,7 +278,7 @@ class HostGame {
   }
   attach(transport) { this.t = transport; }
   push() { const s = JSON.parse(JSON.stringify(this.s)); s.stage.elapsed = Date.now() - (this.stageT0 || Date.now()); this.t && this.t.send({ t: 'state', s }); onState(s); }
-  setStage(st) { this.s.stage = Object.assign({}, st, { id: ++this.sid }); this.stageT0 = Date.now(); this.answers = [null, null]; this.nexts = [false, false]; this.rolled = false; this.choice = null; this.push(); }
+  setStage(st) { this.s.stage = Object.assign({}, st, { id: ++this.sid }); this.stageT0 = Date.now(); this.answers = [null, null]; this.nexts = [false, false]; this.rolled = false; this.choice = null; this.push(); if (this.bot) this.botAct(this.s.stage); }
   toast(text) { this.s.toast = { id: ++this.toastId, text }; }
   waitFor(cond, ms) {
     return new Promise(res => {
@@ -422,12 +424,49 @@ class HostGame {
       case 'luck': await this.luck(p, idx); break;
     }
   }
+  // ---- Computer-Gegner
+  botAct(st) {
+    const id = st.id, run = this.runId;
+    const later = (ms, fn) => setTimeout(() => { if (this.s.stage.id === id && this.runId === run) fn(); }, ms);
+    const act = a => this.onAction(1, a);
+    switch (st.type) {
+      case 'roll': if (st.p === 1) later(1100 + rand(700), () => act({ type: 'roll' })); break;
+      case 'choose': if (st.p === 1) later(2300 + rand(900), () => act({ type: 'choose', i: this.botPick(st) })); break;
+      case 'q': { const dur = st.dur * 1000, ms = Math.min(dur - 400, 1300 + Math.random() * dur * .65); later(ms, () => act({ type: 'answer', sid: id, v: this.botAnswer(st), ms: Math.round(ms) })); break; }
+      case 'free': later(5000 + rand(7000), () => act({ type: 'answer', sid: id, v: BOT_TEXTS[rand(BOT_TEXTS.length)], ms: 0 })); break;
+      case 'rate': later(2000 + rand(3000), () => act({ type: 'answer', sid: id, v: Math.random() < .5 ? 2 : 1, ms: 0 })); break;
+      case 'reveal': case 'rated': case 'vaultResult': later(1200, () => act({ type: 'next', sid: id })); break;
+    }
+  }
+  botAnswer(st) {
+    const q = this.curQ;
+    if (q.kind === 'mc' || q.kind === 'tf') {
+      if (Math.random() < (q.kind === 'tf' ? .7 : .6)) return q.answer;
+      const wrong = q.options.map((_, i) => i).filter(i => i !== q.answer); return wrong[rand(wrong.length)];
+    }
+    if (q.kind === 'est') { const v = q.answer * (.65 + Math.random() * .7); return Math.abs(q.answer) < 20 ? Math.round(v * 10) / 10 : Math.round(v); }
+    if (q.kind === 'who') return rand(2);
+    return rand(q.options.length);
+  }
+  botPick(st) {
+    const me = this.s.players[1];
+    const val = o => {
+      const f = this.s.fields[o.to];
+      if (f.t === 'vault') return me.crowns[f.c] ? 2 : me.keys[f.c] ? 10 : 3;
+      if (f.t === 'cat') return me.keys[f.c] || me.crowns[f.c] ? 3 : 7;
+      return f.t === 'start' ? 2 : 4;
+    };
+    let best = 0, bv = -1;
+    st.opts.forEach((o, i) => { const v = val(o) + Math.random() * 2.5; if (v > bv) { bv = v; best = i; } });
+    return best;
+  }
   mcQ(cat) { const r = this.draw('mc_' + cat, Q.mc[cat]); const opts = shuffle(r.slice(1)); return { kind: 'mc', text: r[0], options: opts, answer: opts.indexOf(r[1]), cat }; }
   tfQ() { const r = this.draw('tf', Q.tf); return { kind: 'tf', text: r[0], options: ['Wahr', 'Falsch'], answer: r[1] ? 0 : 1 }; }
   async ask(q, o = {}) {
     const dur = o.dur || 15, mult = this.mult();
     const pub = { kind: q.kind, text: q.text, options: q.options, unit: q.unit, subject: q.subject };
     const base = { cat: q.cat || null, ft: o.ft || null, title: o.title || null, n: o.n || null, of: o.of || null, mover: o.mover ?? null, mult, vault: o.vault || null, keyFor: o.keyFor ?? null };
+    this.curQ = q;
     this.setStage(Object.assign({ type: 'q', q: pub, dur, answered: [false, false] }, base));
     await this.waitFor(this.both(() => this.answers), dur * 1000 + 1500);
     const A = this.answers.slice();
@@ -624,6 +663,7 @@ function showHome() {
     <div class="col" style="margin:14px 0">
       <button class="btn" id="host">🎮 Spiel erstellen</button>
       <button class="btn cyan" id="join">🔑 Mit Code beitreten</button>
+      <button class="btn ghost" id="bot">🤖 Übungsspiel gegen den Computer</button>
     </div>
     ${statsHTML()}
     <div style="height:10px;flex:none"></div>`);
@@ -633,6 +673,7 @@ function showHome() {
   const need = () => { if (!P.name) { showCreator(true); return false; } return true; };
   $('#host', el).onclick = () => { Sound.click(); if (need()) startHost(); };
   $('#join', el).onclick = () => { Sound.click(); if (need()) showJoin(''); };
+  $('#bot', el).onclick = () => { Sound.click(); if (need()) startBot(); };
 }
 
 function showCreator(nameMissing) {
@@ -685,6 +726,16 @@ function showRules() {
 }
 
 /* ---------- Host / Beitreten ---------- */
+function startBot() {
+  C.isHost = true; C.me = 0;
+  const g = new HostGame('BOT'); C.host = g;
+  g.bot = true;
+  g.attach({ send() {}, destroy() {} });
+  const bot = newPlayer({ name: 'Robo', head: '🤖', body: Math.random() < .5 ? 'm' : 'f', color: P.color === '#22d3ff' ? '#ff9f1c' : '#22d3ff', pid: 'bot' }, 1);
+  g.s.players.push(bot); g.s.online = true;
+  C.net = null;
+  g.push();
+}
 function startHost(code) {
   code = code || genCode();
   C.isHost = true; C.me = 0;
@@ -774,11 +825,11 @@ function renderLobby(s) {
   const chips = CAT_KEYS.map(c => `<button class="chip ${s.cats.includes(c) ? 'on' : ''}" data-cat="${c}" style="--cc:${CATS[c].c}" ${isHost && st.mode === 'custom' ? '' : 'disabled'}>${CATS[c].i} ${CATS[c].s}</button>`).join('');
   const html = `
     <div class="topbar"><button class="iconbtn" id="leave">←</button><div class="spacer"></div><span class="label">Lobby</span><div class="spacer"></div><button class="iconbtn" id="rules">❓</button></div>
-    <div class="card col center">
+    ${s.code === 'BOT' ? `<div class="card col center"><div class="label">Übungsspiel</div><div style="font-size:44px">🤖</div><div style="font-weight:800">Du spielst gegen Robo, den Computer. Perfekt zum Reinschnuppern!</div></div>` : `<div class="card col center">
       <div class="label">Spiel-Code</div>
       ${codeHTML}
       ${isHost ? `<p class="muted" style="margin:4px 0 0;font-weight:700;font-size:14px">Dein Schatz gibt diesen Code ein</p>${navigator.share ? '<button class="btn ghost small" id="share" style="align-self:center">📤 Einladung teilen</button>' : ''}` : ''}
-    </div>
+    </div>`}
     <div class="vs" style="margin:14px 0">${slot(pl[0])}<div class="vsx">VS</div>${slot(pl[1])}</div>
     <div class="card col">
       <div class="label">Kategorien</div>

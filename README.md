@@ -9,6 +9,8 @@ Zwei Handys, ein Code, los geht's. Kein Server, keine Anmeldung.
 3. Der andere tippt auf **Mit Code beitreten** und gibt den Code ein.
 4. Der Host wählt die Spiellänge (Quickie / Normal / Marathon) und startet.
 
+**Allein reinschnuppern:** Mit „🤖 Übungsspiel gegen den Computer“ spielst du gegen Robo. Übungsspiele zählen nicht in die Statistik.
+
 **Tipp:** Über „Teilen“ → „Zum Home-Bildschirm“ wird KOPFNUSS wie eine echte App gestartet.
 Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in den Hintergrund schicken.
 
