@@ -13,19 +13,26 @@ Zwei Handys, ein Code, los geht's. Kein Server, keine Anmeldung.
 Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in den Hintergrund schicken.
 
 ## Spielprinzip
-- **Würfeln und laufen:** Ihr würfelt abwechselnd und lauft über 30 Felder.
-- **Immer im Duell:** Jede Frage beantwortet ihr **beide gleichzeitig**. Richtig und schnell bringt bis zu 200 Punkte. Niemand wartet.
-- **🔑 Schlüssel:** Auf einem Kategorie-Feld bekommt der Spieler am Zug bei richtiger Antwort den Schlüssel dieser Kategorie.
-- **🔐 Tresore:** Davon gibt es 6. Ihr müsst 3 Fragen beantworten: mit Schlüssel reichen 2 richtige, ohne müssen alle 3 stimmen. Ein geknackter Tresor bringt 👑 und +300.
+- **Figur basteln:** Wähle Körper (Mann/Frau), ein beliebiges Emoji als Kopf und eine Farbe.
+- **Taktisch würfeln:** Du würfelst mit 2 Würfeln und wählst, welchen du nimmst und ob du vor- oder rückwärts läufst. Bei einem Pasch darfst du auch doppelt so weit gehen. Die möglichen Ziele leuchten auf dem 3D-Brett.
+- **Immer im Duell:** Jede Frage beantwortet ihr **beide gleichzeitig**. Richtig und schnell bringt bis zu 200 Punkte.
+- **🔑 Schlüssel-Fragen:** Wer auf einem Kategorie-Feld richtig antwortet, bekommt den Schlüssel dieser Kategorie.
+- **🔐 Tresore:** Jeder Tresor hat 3 Fragen. Mit Schlüssel reichen 2 richtige, ohne müssen alle 3 stimmen. Ein geknackter Tresor bringt 👑 und +300.
 - **Sonderfelder**
-  - ⚡ **Blitzrunde:** 5× Wahr/Falsch mit je 5 Sekunden.
-  - 🎯 **Schätz-Duell:** Wer näher dran ist, gewinnt.
+  - ⚡ **Blitzrunde:** Wahr/Falsch mit je 5 Sekunden
+  - 🎯 **Schätz-Duell:** Wer näher dran ist, gewinnt
   - 💘 **Pärchen-Runde:** „Wer von euch beiden …?“ oder „Was sagt dein Schatz?“
-  - 🤪 **Quatsch-Runde:** Freie Antwort tippen, der andere bewertet mit 😐 / 😄 / 😂.
-  - 🎰 **Glücksrad:** Punkte klauen, Platztausch, Teleport, nochmal würfeln …
-- **Finale:** In der letzten Runde gibt es doppelte Punkte. Wer alle 6 Kronen holt, gewinnt sofort.
+  - 🤪 **Quatsch-Runde:** Freie Antwort, der andere bewertet
+  - 🎰 **Glücksrad**
+- **Finale:** Die letzte Runde zählt doppelt.
+- **Statistik:** Auf der Startseite stehen deine Bilanz, Trefferquote, Stärken pro Kategorie und das Duell-Ergebnis gegen deinen Schatz.
 
-Kategorien: 🌍 Welt & Reisen · 🌿 Tiere & Garten · 🫀 Körper · 🏎️ Sport & Motor · 📱 Social & Stars (YouTube, TikTok, Streamer, Promis) · 💡 Technik & Alltag
+**Kategorien** (11): 🌍 Welt & Reisen · 🗺️ Erdkunde · 🌿 Tiere & Garten · 🫀 Körper & Gesundheit · 🏎️ Sport & Motor · 📱 Social & Stars · 💡 Technik & Alltag · 📺 Trash-TV · 🤯 Woher weißt du das?! · 💃 Alles rund um die Frau · 🧔 Alles rund um den Mann
+
+**Modi:**
+- **Alles muss rein:** alle Kategorien
+- **Caro-Modus:** ohne Sport & Technik
+- **Individuell:** selbst auswählen, mindestens 3
 
 ## Online stellen (GitHub Pages)
 1. Im Repo auf GitHub: **Settings → Pages**
@@ -36,7 +43,7 @@ Kategorien: 🌍 Welt & Reisen · 🌿 Tiere & Garten · 🫀 Körper · 🏎️
 > Oder ihr zieht den Ordner per Drag & Drop auf https://app.netlify.com/drop.
 
 ## Technik
-- Reines HTML/CSS/JS ohne Build-Schritt. Die Fragen stehen in `questions.js` und lassen sich leicht erweitern.
+- Reines HTML/CSS/JS ohne Build-Schritt. Die Fragen stehen in `questions.js` und `questions-extra.js` (über 1.100 Stück) und lassen sich leicht erweitern.
 - Die Handys verbinden sich direkt per WebRTC über [PeerJS](https://peerjs.com) (`peerjs.min.js`, MIT-Lizenz). Der Code dient nur als Treffpunkt.
 - Das Handy des Hosts steuert das Spiel, das andere zeigt nur den Zustand an.
 - Testmodus am PC: `index.html?local` in zwei Tabs öffnen. Die Verbindung läuft dann über den Browser statt übers Internet.
