@@ -27,6 +27,18 @@ Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in de
   - 🤪 **Quatsch-Runde:** Freie Antwort, der andere bewertet
   - 🎰 **Glücksrad**
 - **Finale:** Die letzte Runde zählt doppelt.
+- **Neue Modi:**
+  - 🧠 **Gedankenleser:** 2 Runden, die Rollen werden getauscht
+  - 🃏 **Bluffmeister**
+  - 😜 **Emoji-Übersetzer**
+  - ✏️ **Kritzel-Kopf**
+  - ❓ **Überraschungsfeld**
+- **Spannung:**
+  - Serien-Bonus bei Übereinstimmungen
+  - Handicap: Wer führt, hat weniger Zeit
+  - Comeback-Risikorunde ab 400 Punkten Rückstand
+- **Verliebt / Freunde:** Verliebt bringt zusätzliche, heißere Fragen. Bei Freunde werden alle Romantik-Fragen aussortiert.
+- **Freischalten:** Hüte, Brillen und Effekte für deine Figur gibt es durch gespielte Spiele und Siege.
 - **Statistik:** Auf der Startseite stehen deine Bilanz, Trefferquote, Stärken pro Kategorie und das Duell-Ergebnis gegen deinen Schatz.
 
 **Kategorien** (11): 🌍 Welt & Reisen · 🗺️ Erdkunde · 🌿 Tiere & Garten · 🫀 Körper & Gesundheit · 🏎️ Sport & Motor · 📱 Social & Stars · 💡 Technik & Alltag · 📺 Trash-TV · 🤯 Woher weißt du das?! · 💃 Alles rund um die Frau · 🧔 Alles rund um den Mann

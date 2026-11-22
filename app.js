@@ -46,7 +46,13 @@ function resolveCats(st) {
 const FT = {
   start: { i: '🚀', n: 'Start', c: '#ffffff' },
   blitz: { i: '⚡', n: 'Blitzrunde', c: '#fff36b', sub: '5 Wahr-oder-Falsch-Fragen. 5 Sekunden. Kein Nachdenken!' },
-  pair:  { i: '💘', n: 'Pärchen-Runde', c: '#ff2e88', sub: "Jetzt wird's persönlich …" },
+  pair:  { i: '💘', n: 'Wer würde eher?', c: '#ff2e88', sub: "Tippt beide gleichzeitig. Seid ihr euch einig, gibt's Punkte!" },
+  mind:  { i: '🧠', n: 'Gedankenleser', c: '#ff6bd6', sub: 'Zwei Runden: Erst liest der eine die Gedanken des anderen – dann umgekehrt!' },
+  bluff: { i: '🃏', n: 'Bluffmeister', c: '#ff9f1c', sub: 'Erfinde eine falsche Antwort, die echt klingt – und finde selbst die Wahrheit!' },
+  emoji: { i: '😜', n: 'Emoji-Übersetzer', c: '#ffd60a', sub: 'Stelle deinen Begriff NUR mit Emojis dar – der andere muss raten!' },
+  draw:  { i: '✏️', n: 'Kritzel-Kopf', c: '#22d3ff', sub: '15 Sekunden zeichnen – der andere muss raten. Schlecht malen erlaubt!' },
+  surprise: { i: '❓', n: 'Überraschung', c: '#ffffff', sub: 'Niemand weiß, was kommt …' },
+  comeback: { i: '🔥', n: 'Comeback-Risiko', c: '#ff4d6d' },
   free:  { i: '🤪', n: 'Quatsch-Runde', c: '#a3ff3c', sub: 'Schreibt die lustigste Antwort – der andere bewertet!' },
   est:   { i: '🎯', n: 'Schätz-Duell', c: '#22d3ff', sub: 'Wer näher dran ist, gewinnt. Volltreffer = Extrabonus!' },
   luck:  { i: '🎰', n: 'Glücksrad', c: '#ffd60a', sub: 'Alles kann passieren …' },
@@ -64,17 +70,50 @@ function buildBoard(cats) {
   const catTotal = Math.max(k, Math.min(cap * k, 29 - 7 - k));
   const per = cats.map((c, i) => Math.floor(catTotal / k) + (i < catTotal % k ? 1 : 0));
   const nSpec = 29 - k - catTotal;
-  const POOL = ['pair', 'est', 'free', 'blitz', 'pair', 'luck', 'est', 'free', 'pair', 'blitz', 'est', 'luck', 'free', 'pair', 'est', 'free', 'blitz', 'pair', 'luck', 'est', 'free'];
-  const specs = shuffle(Array.from({ length: nSpec }, (_, j) => POOL[j % POOL.length]));
-  const segs = cats.map((c, i) => Array.from({ length: per[i] }, () => ({ t: 'cat', c })));
-  specs.forEach((s, j) => segs[j % k].push({ t: s }));
-  const out = [{ t: 'start' }];
-  segs.forEach((seg, i) => { out.push(...shuffle(seg)); out.push({ t: 'vault', c: cats[i] }); });
-  return out;
+  const POOL = ['pair', 'mind', 'est', 'free', 'bluff', 'emoji', 'draw', 'surprise', 'blitz', 'luck'];
+  let specs = []; while (specs.length < nSpec) specs = specs.concat(shuffle(POOL)); specs = specs.slice(0, nSpec);
+  // Tresore grob verteilt, aber wild durchgemischt
+  const out = new Array(N).fill(null); out[0] = { t: 'start' };
+  shuffle(cats).forEach((c, i) => {
+    let p = Math.round(1 + (i + .5) * 29 / k) + rand(3) - 1, tries = 0;
+    const bad = q => q < 1 || q > 29 || out[q] || (out[q - 1] && out[q - 1].t === 'vault') || (q < 29 && out[q + 1] && out[q + 1].t === 'vault');
+    while (bad(p) && tries++ < 60) p = 1 + rand(29);
+    while (out[p]) p = p % 29 + 1;
+    out[p] = { t: 'vault', c };
+  });
+  const rest = cats.flatMap((c, i) => Array.from({ length: per[i] }, () => ({ t: 'cat', c }))).concat(specs.map(t => ({ t })));
+  const same = (a, b) => a && b && a.t === b.t && a.c === b.c;
+  let best = null, bestBad = 1e9;
+  for (let tr = 0; tr < 60; tr++) {
+    const sh = shuffle(rest), tmp = out.slice(); let j = 0;
+    for (let i = 1; i < N; i++) if (!tmp[i]) tmp[i] = sh[j++];
+    let badN = 0; for (let i = 1; i < N; i++) if (same(tmp[i], tmp[(i + 1) % N])) badN++;
+    if (badN < bestBad) { bestBad = badN; best = tmp; } if (!badN) break;
+  }
+  return best;
 }
 const HEADS = ['🦊', '🐼', '🐸', '🦄', '🐯', '🐙', '👽', '🤖', '🐻', '🐵', '🐶', '🐱', '🐷', '🐰', '🐨', '🦁', '🐔', '🐧', '🦉', '🐢',
   '😎', '🤓', '😜', '🥸', '🤠', '😈', '👻', '💀', '🤡', '👑', '🎃', '🌝', '🍑', '🍆', '🌶️', '🍕', '🍩', '🥑', '🦖', '🧠', '👸', '🤴', '🧜‍♀️', '🧛', '🥷', '🧙'];
 const COLORS = ['#ff2e88', '#22d3ff', '#a3ff3c', '#ffd60a', '#ff9f1c', '#b06cff', '#ff4d6d', '#1de9b6'];
+const ACC = {
+  hat: [{ v: '' }, { v: '🧢' }, { v: '🎀' }, { v: '🌸', need: { g: 1 } }, { v: '👒', need: { g: 2 } }, { v: '🎩', need: { w: 1 } }, { v: '⛑️', need: { g: 5 } }, { v: '🎓', need: { w: 3 } }, { v: '🎄', need: { g: 10 } }, { v: '👑', need: { w: 5 } }],
+  glasses: [{ v: '' }, { v: '👓' }, { v: '🕶️', need: { w: 1 } }, { v: '🥽', need: { g: 3 } }],
+  aura: [{ v: '' }, { v: '💖', need: { g: 3 } }, { v: '✨', need: { w: 2 } }, { v: '🔥', need: { w: 4 } }, { v: '⚡', need: { g: 10 } }, { v: '🌈', need: { w: 7 } }],
+};
+const unlockState = () => Object.assign({ g: 0, w: 0, done: [] }, store.get('kn_unlock', {}));
+const isUnlocked = it => { const u = unlockState(), n = it.need || {}; return u.g >= (n.g || 0) && u.w >= (n.w || 0); };
+const needText = n => n.w ? `${n.w} ${n.w === 1 ? 'Sieg' : 'Siege'}` : `${n.g} ${n.g === 1 ? 'Spiel' : 'Spiele'}`;
+const ROMANCE = /schatz|kuss|küss|knutsch|kuschel|sexy|nackt|strip|schlafzimmer|\bbett|hochzeit|heirat|löffelchen|verführ|flirt|zweisamkeit|\bdate|romant|massage|dessous|unterwäsche|jahrestag|partner|heizdecke|decke klaut|parfum, das|😏|heißest|ausziehen/i;
+function buildPools(rel) {
+  const love = rel !== 'friends', ok = x => love || !ROMANCE.test(JSON.stringify(x));
+  return {
+    who: Q.who.filter(ok).concat(love ? Q.spicy.who : []),
+    mind: Q.mind.filter(ok).concat(love ? Q.spicy.mind : []),
+    free: Q.free.filter(ok).concat(love ? Q.spicy.free : []),
+    talk: Q.talk.concat(love ? Q.talkLove : []),
+  };
+}
+const BOT_BLUFFS = ['Wegen einer alten Tradition aus Bayern', 'Das hat die NASA so entschieden', 'Weil es im Mittelalter Pflicht war', 'Durch einen Unfall in einer Käsefabrik', 'Wegen der Mondphasen', 'Das war ein Marketing-Trick'];
 const BOT_TEXTS = ['Beep boop, ich hab keine Ahnung 🤖', 'Ein Toaster mit Gefühlen', 'Error 404: Witz nicht gefunden', 'Socken. Immer Socken.', 'Das sag ich nur meinem Akku', 'Ein Pinguin namens Klaus', 'Mama Robo wäre stolz', 'Strg + Lachen'];
 const LUCK = [
   { id: 'plus', l: '+150 Punkte 🎁' }, { id: 'steal', l: 'Klau 100 Punkte 🦹' }, { id: 'swap', l: 'Platztausch 🔄' },
@@ -97,7 +136,7 @@ function loadProfile() {
   return p;
 }
 const P = loadProfile();
-function saveProfile() { store.set('kn_profile', { name: P.name, head: P.head, body: P.body, color: P.color }); }
+function saveProfile() { store.set('kn_profile', { name: P.name, head: P.head, body: P.body, color: P.color, hat: P.hat || '', glasses: P.glasses || '', aura: P.aura || '' }); }
 const STATS0 = { games: 0, wins: 0, losses: 0, draws: 0, points: 0, best: 0, right: 0, ans: 0, crowns: 0, laughs: 0, bruller: 0, cat: {}, vs: {}, recent: [], done: [] };
 function loadStats() { return Object.assign({}, STATS0, store.get('kn_stats', {})); }
 function recordGame(s, me) {
@@ -136,29 +175,44 @@ function figureHTML(p, cls = '') {
        <path d="M12 21 Q30 12 48 21 L45 51 Q30 55 15 51 Z" fill="var(--pc)" ${O}/>
        <path d="M30 15 Q40 16 48 21 L45 51 Q38 54 30 54 Z" fill="rgba(0,0,0,.2)"/>
        <ellipse cx="20" cy="29" rx="3.5" ry="8" fill="rgba(255,255,255,.35)"/>`;
-  return `<div class="fig ${cls}" style="--pc:${p.color}"><svg class="fbody" viewBox="0 0 60 74">${body}</svg><div class="fhead">${esc(p.head)}</div></div>`;
+  const aura = p.aura ? `<div class="aura">${[0, 1, 2, 3].map(i => `<i style="--a:${i * 90}deg">${esc(p.aura)}</i>`).join('')}</div>` : '';
+  return `<div class="fig ${cls}" style="--pc:${p.color}">${aura}<svg class="fbody" viewBox="0 0 60 74">${body}</svg><div class="fhead">${esc(p.head)}${p.glasses ? `<span class="fglasses">${esc(p.glasses)}</span>` : ''}${p.hat ? `<span class="fhat">${esc(p.hat)}</span>` : ''}</div></div>`;
 }
 
 /* ---------------- Sound ---------------- */
 const Sound = {
   ctx: null, on: store.get('kn_sound', true) !== false,
-  init() { if (this.ctx) return; try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} },
+  init() { if (this.ctx) return; try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); const b = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; this.nbuf = b; } catch (e) {} },
   tone(f, d = .12, type = 'square', v = .08, when = 0, slide) {
     if (!this.on || !this.ctx) return;
     const t = this.ctx.currentTime + when, o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + d);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t + d + .03);
+  },
+  noise(d = .1, v = .1, when = 0, hp = 800) {
+    if (!this.on || !this.ctx || !this.nbuf) return;
+    const t = this.ctx.currentTime + when, src = this.ctx.createBufferSource(), f = this.ctx.createBiquadFilter(), g = this.ctx.createGain();
+    src.buffer = this.nbuf; f.type = 'highpass'; f.frequency.value = hp;
     g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
-    o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t + d + .02);
+    src.connect(f).connect(g).connect(this.ctx.destination); src.start(t, Math.random() * .5); src.stop(t + d + .02);
   },
   click() { this.tone(660, .05, 'triangle', .06); },
-  tick() { this.tone(1200, .03, 'square', .04); },
-  ok() { [523, 659, 784, 1046].forEach((f, i) => this.tone(f, .14, 'square', .06, i * .07)); },
-  bad() { this.tone(300, .35, 'sawtooth', .07, 0, 90); },
-  dice() { for (let i = 0; i < 8; i++) this.tone(200 + rand(500), .03, 'square', .04, i * .08); },
+  tick() { this.tone(1200, .03, 'square', .035); },
+  countdown(n) { const f = { 3: 660, 2: 784, 1: 988 }[n] || 600; this.tone(f, .12, 'square', .07); this.tone(f * 2, .08, 'sine', .03); },
+  sent() { this.tone(280, .09, 'sine', .14, 0, 950); this.noise(.04, .05, 0, 3000); },
+  ok() { this.hit(); },
+  hit() { [523, 659, 784, 1046].forEach((f, i) => this.tone(f, .16, 'square', .055, i * .06)); [2093, 2637, 3136].forEach((f, i) => this.tone(f, .25, 'sine', .03, .25 + i * .05)); },
+  jackpot() { this.hit(); [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, .3, 'triangle', .07, .35 + i * .09)); this.noise(.6, .05, .35, 5000); },
+  bad() { this.tone(150, .38, 'sawtooth', .08); this.tone(156, .38, 'square', .045); },
+  dice() { for (let i = 0; i < 9; i++) { this.noise(.03, .12, i * .07, 1500); this.tone(180 + rand(400), .025, 'square', .03, i * .07); } },
   hop() { this.tone(420, .08, 'triangle', .05, 0, 900); },
-  whoosh() { this.tone(200, .3, 'sawtooth', .04, 0, 1400); },
-  fanfare() { [392, 523, 659, 784, 659, 784, 1046].forEach((f, i) => this.tone(f, .18, 'square', .06, i * .11)); },
-  sad() { [392, 370, 349, 330].forEach((f, i) => this.tone(f, .25, 'triangle', .07, i * .2)); },
+  whoosh() { this.noise(.35, .08, 0, 600); this.tone(200, .3, 'sawtooth', .03, 0, 1400); },
+  key() { [1318, 1568, 2093, 2637].forEach((f, i) => this.tone(f, .3, 'sine', .06, i * .08)); this.noise(.5, .03, .1, 6000); },
+  drumroll(sec = 2.6) { const n = Math.floor(sec / .045); for (let i = 0; i < n; i++) this.noise(.05, .04 + .1 * i / n, i * .045, 400); this.noise(1.2, .22, sec, 2500); this.tone(110, .5, 'sine', .2, sec); },
+  fanfare() { [[392, 494], [523, 659], [659, 784], [784, 988], [659, 784], [784, 988], [1046, 1318]].forEach((ch, i) => ch.forEach(f => this.tone(f, .2 + (i === 6 ? .5 : 0), 'square', .045, i * .12))); },
+  win() { this.fanfare(); this.noise(.8, .06, .8, 5000); },
+  sad() { [392, 370, 349, 330].forEach((f, i) => this.tone(f, .28, 'triangle', .07, i * .22)); this.tone(110, .8, 'sawtooth', .04, .9, 70); },
 };
 
 /* ---------------- Netzwerk ---------------- */
@@ -263,7 +317,7 @@ class GuestTransport {
 /* ---------------- Host-Spiellogik ---------------- */
 const freshStats = () => ({ ans: 0, right: 0, ms: 0, laughs: 0, bruller: 0, cat: {} });
 function newPlayer(prof, idx) {
-  return { name: (prof.name || (idx ? 'Spieler 2' : 'Spieler 1')).slice(0, 14), head: prof.head || '🙂', body: prof.body === 'f' ? 'f' : 'm', color: prof.color, pid: prof.pid, connected: true,
+  return { name: (prof.name || (idx ? 'Spieler 2' : 'Spieler 1')).slice(0, 14), head: prof.head || '🙂', body: prof.body === 'f' ? 'f' : 'm', color: prof.color, hat: prof.hat || '', glasses: prof.glasses || '', aura: prof.aura || '', pid: prof.pid, connected: true,
     pos: 0, score: 0, keys: {}, crowns: {}, stats: freshStats() };
 }
 
@@ -272,13 +326,14 @@ class HostGame {
     this.code = code; this.sid = 0; this.toastId = 0; this.waiters = []; this.decks = {};
     this.answers = [null, null]; this.nexts = [false, false]; this.rolled = false; this.choice = null; this.runId = 0;
     const saved = store.get('kn_settings', null);
-    const settings = Object.assign({ turns: 10, mode: 'all', custom: CAT_KEYS.slice() }, saved || {});
+    const settings = Object.assign({ turns: 10, mode: 'all', custom: CAT_KEYS.slice(), relation: 'love' }, saved || {});
+    this.cbCool = [0, 0];
     const cats = resolveCats(settings);
     this.s = { phase: 'lobby', code, players: [newPlayer(P, 0)], settings, cats, fields: buildBoard(cats), turn: 0, turnNo: 0, totalTurns: 20, final: false, lastDice: [3, 5], stage: { id: 0, type: 'lobby' }, toast: null, online: false, gameId: '' };
   }
   attach(transport) { this.t = transport; }
   push() { const s = JSON.parse(JSON.stringify(this.s)); s.stage.elapsed = Date.now() - (this.stageT0 || Date.now()); this.t && this.t.send({ t: 'state', s }); onState(s); }
-  setStage(st) { this.s.stage = Object.assign({}, st, { id: ++this.sid }); this.stageT0 = Date.now(); this.answers = [null, null]; this.nexts = [false, false]; this.rolled = false; this.choice = null; this.push(); if (this.bot) this.botAct(this.s.stage); }
+  setStage(st) { this.s.stage = Object.assign({}, st, { id: ++this.sid }); this.stageT0 = Date.now(); this.answers = [null, null]; this.nexts = [false, false]; this.rolled = false; this.choice = null; this.cbReq = false; this.push(); if (this.bot) this.botAct(this.s.stage); }
   toast(text) { this.s.toast = { id: ++this.toastId, text }; }
   waitFor(cond, ms) {
     return new Promise(res => {
@@ -305,7 +360,7 @@ class HostGame {
         pl.push(p); this.toast(`${p.name} ist da! 🎉`);
       } else if (pl[1].pid === prof.pid || !pl[1].connected) {
         pl[1].connected = true; pl[1].pid = prof.pid;
-        if (this.s.phase === 'lobby') Object.assign(pl[1], { name: (prof.name || pl[1].name).slice(0, 14), head: prof.head || pl[1].head, body: prof.body === 'f' ? 'f' : 'm' });
+        if (this.s.phase === 'lobby') Object.assign(pl[1], { name: (prof.name || pl[1].name).slice(0, 14), head: prof.head || pl[1].head, body: prof.body === 'f' ? 'f' : 'm', hat: prof.hat || '', glasses: prof.glasses || '', aura: prof.aura || '' });
         this.toast(`${pl[1].name} ist wieder da!`);
       } else { this.t.send({ t: 'full' }); return; }
       this.t.send({ t: 'welcome', you: 1 });
@@ -323,9 +378,10 @@ class HostGame {
     const st = this.s.stage;
     switch (a.type) {
       case 'roll': if (st.type === 'roll' && st.p === i) this.rolled = true; break;
+      case 'comeback': if (st.type === 'roll' && st.p === i && st.comeback) this.cbReq = true; break;
       case 'choose': if (st.type === 'choose' && st.p === i && this.choice == null && st.opts[a.i]) this.choice = a.i; break;
       case 'answer':
-        if (a.sid === st.id && ['q', 'free', 'rate'].includes(st.type) && !this.answers[i]) {
+        if (a.sid === st.id && ['q', 'free', 'rate', 'dWrite', 'dGuess'].includes(st.type) && !this.answers[i] && (st.only == null || st.only === i)) {
           this.answers[i] = { v: a.v, ms: Math.max(0, +a.ms || 0) };
           st.answered[i] = true; this.push();
         } break;
@@ -348,7 +404,8 @@ class HostGame {
     this.runId++; this.waiters.forEach(w => clearTimeout(w.timer)); this.waiters = [];
     for (const p of this.s.players) Object.assign(p, { pos: 0, score: 0, keys: {}, crowns: {}, stats: freshStats() });
     this.s.cats = resolveCats(this.s.settings);
-    Object.assign(this.s, { phase: 'game', fields: buildBoard(this.s.cats), turn: rand(2), turnNo: 0, totalTurns: this.s.settings.turns * 2, final: false, gameId: Date.now().toString(36) + rand(1e6) });
+    this.pools = buildPools(this.s.settings.relation); this.cbCool = [0, 0];
+    Object.assign(this.s, { phase: 'game', streak: 0, fields: buildBoard(this.s.cats), turn: rand(2), turnNo: 0, totalTurns: this.s.settings.turns * 2, final: false, gameId: Date.now().toString(36) + rand(1e6) });
     this.run(this.runId).catch(e => console.error(e));
   }
   async run(runId) {
@@ -359,9 +416,19 @@ class HostGame {
       this.s.final = this.s.turnNo >= this.s.totalTurns - 2;
       if (this.s.final && !wasFinal) this.toast('🔥 FINALE! Ab jetzt doppelte Punkte!');
       const p = this.s.turn; this.extraTurn = false;
-      this.setStage({ type: 'roll', p });
-      await this.waitFor(() => this.rolled);
+      const opp = pl[1 - p], canCB = opp.score - pl[p].score >= 400 && this.cbCool[p] <= 0;
+      if (this.cbCool[p] > 0) this.cbCool[p]--;
+      this.setStage({ type: 'roll', p, comeback: canCB, gap: opp.score - pl[p].score });
+      await this.waitFor(() => this.rolled || this.cbReq);
       if (runId !== this.runId) return;
+      if (this.cbReq) {
+        this.cbCool[p] = 3;
+        await this.comeback(p);
+        if (runId !== this.runId) return;
+        this.setStage({ type: 'roll', p });
+        await this.waitFor(() => this.rolled);
+        if (runId !== this.runId) return;
+      }
       const d = [1 + rand(6), 1 + rand(6)]; this.s.lastDice = d;
       const pos = pl[p].pos, opts = [];
       const addOpt = (steps, tag) => { for (const dir of [1, -1]) { const to = ((pos + dir * steps) % N + N) % N; if (!opts.some(o => o.to === to)) opts.push({ steps, dir, to, tag }); } };
@@ -387,9 +454,25 @@ class HostGame {
     await sleep(200 + n * 300 + 450);
   }
   async intro(o, ms) { this.setStage(Object.assign({ type: 'intro' }, o)); await sleep(ms); }
-  async resolve(p, idx) {
-    const f = this.s.fields[idx], pl = this.s.players[p];
-    switch (f.t) {
+  async resolve(p, idx, forceT) {
+    const f = this.s.fields[idx], pl = this.s.players[p], t = forceT || f.t;
+    switch (t) {
+      case 'surprise': {
+        const pool = ['blitz', 'est', 'pair', 'mind', 'free', 'bluff', 'emoji', 'draw', 'luck'], pick = pool[rand(pool.length)];
+        this.setStage({ type: 'surprise', p, field: idx, items: pool.map(x => FT[x].i + ' ' + FT[x].n), pick: pool.indexOf(pick) });
+        await sleep(3600);
+        await this.resolve(p, idx, pick); break;
+      }
+      case 'mind': {
+        const A = pl.name, B = this.s.players[1 - p].name;
+        await this.intro({ p, field: idx, ft: 'mind', icon: '🧠', title: 'GEDANKENLESER', sub: `Runde 1: ${A} liest ${B}s Gedanken. Runde 2: umgekehrt!` }, 2600);
+        for (let r = 0; r < 2; r++) {
+          const subject = r === 0 ? 1 - p : p, m = this.draw('mind', this.pools.mind);
+          await this.ask({ kind: 'mind', text: m[0], self: m[1], options: m[2], subject }, { dur: 15, revealMs: 8000, ft: 'mind', title: `Runde ${r + 1}/2` });
+        }
+        break;
+      }
+      case 'bluff': case 'emoji': case 'draw': await this.dual(t, p, idx); break;
       case 'start': this.push(); await sleep(900); break;
       case 'cat': {
         const has = pl.keys[f.c] || pl.crowns[f.c];
@@ -409,20 +492,72 @@ class HostGame {
         await this.ask({ kind: 'est', text: e[0], answer: e[1], unit: e[2] }, { dur: 20, revealMs: 7000, ft: 'est' });
         break;
       }
-      case 'pair':
-        if (Math.random() < .55) {
-          const t = this.draw('who', Q.who).replace(/^…\s*/, '');
-          await this.intro({ p, field: idx, ft: 'pair', icon: '💘', title: 'WER VON EUCH?', sub: "Tippt beide, wen es trifft. Seid ihr euch einig, gibt's Punkte für beide!" }, 2200);
-          await this.ask({ kind: 'who', text: 'Wer von euch beiden ' + t, options: [0, 1] }, { dur: 12, revealMs: 6000, ft: 'pair' });
-        } else {
-          const g = this.draw('guess', Q.guess);
-          await this.intro({ p, field: idx, ft: 'pair', icon: '🔮', title: 'WAS SAGT DEIN SCHATZ?', sub: `${pl.name} antwortet ehrlich – ${this.s.players[1 - p].name} muss es erraten!` }, 2400);
-          await this.ask({ kind: 'guess', text: g[0], options: g[1], subject: p }, { dur: 15, revealMs: 6000, ft: 'pair' });
-        }
+      case 'pair': {
+        const w = this.draw('who', this.pools.who).replace(/^…\s*/, '');
+        await this.intro({ p, field: idx, ft: 'pair', icon: '💘', title: 'WER WÜRDE EHER?', sub: FT.pair.sub + (this.s.streak >= 2 ? ` 🔥 Serie läuft: ${this.s.streak}!` : '') }, 2200);
+        await this.ask({ kind: 'who', text: 'Wer von euch beiden ' + w, options: [0, 1] }, { dur: 12, revealMs: 8000, ft: 'pair' });
         break;
+      }
       case 'free': await this.quatsch(p, idx); break;
       case 'luck': await this.luck(p, idx); break;
     }
+  }
+  dualItem(mode) {
+    if (mode === 'bluff') {
+      const r = this.draw('bluff', Q.bluff);
+      return { pub: { q: r[0], real: r[1] }, prompt: r[0], opts: fake => { const list = shuffle([{ t: r[1], k: 'real' }, { t: fake || 'Keine Ahnung 🤷', k: 'fake' }, { t: r[2], k: 'd' }, { t: r[3], k: 'd' }]); return { list: list.map(x => x.t), real: list.findIndex(x => x.k === 'real'), fake: list.findIndex(x => x.k === 'fake') }; } };
+    }
+    if (mode === 'emoji') {
+      const r = this.draw('emoji', Q.emoji), dec = shuffle(Q.emoji.filter(x => x[1] === r[1] && x[0] !== r[0])).slice(0, 3).map(x => x[0]);
+      return { pub: { term: r[0], type: r[1] }, prompt: r[1], opts: () => { const list = shuffle([r[0]].concat(dec)); return { list, real: list.indexOf(r[0]), fake: -1 }; } };
+    }
+    const term = this.draw('drawT', Q.draw), dec = shuffle(Q.draw.filter(x => x !== term)).slice(0, 3);
+    return { pub: { term }, prompt: '', opts: () => { const list = shuffle([term].concat(dec)); return { list, real: list.indexOf(term), fake: -1 }; } };
+  }
+  async dual(mode, p, idx) {
+    const mult = this.mult();
+    await this.intro({ p, field: idx, ft: mode, icon: FT[mode].i, title: FT[mode].n.toUpperCase(), sub: FT[mode].sub }, 2600);
+    const items = [this.dualItem(mode), this.dualItem(mode)];
+    const wdur = mode === 'draw' ? 15 : mode === 'emoji' ? 35 : 35;
+    this.setStage({ type: 'dWrite', mode, items: items.map(it => it.pub), dur: wdur, answered: [false, false], mult });
+    await this.waitFor(this.both(() => this.answers), wdur * 1000 + 4000);
+    const made = this.answers.map(a => {
+      let v = a && a.v ? String(a.v) : '';
+      if (mode === 'draw') v = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(v) && v.length < 400000 ? v : '';
+      else v = v.trim().slice(0, mode === 'emoji' ? 40 : 90);
+      return v;
+    });
+    const opts = [0, 1].map(g => items[1 - g].opts(made[1 - g]));
+    this.lastRealForBot = opts[1].real;
+    this.setStage({ type: 'dGuess', mode, made, opts: opts.map(o => o.list), prompt: [0, 1].map(g => items[1 - g].prompt), dur: 20, answered: [false, false], mult });
+    await this.waitFor(this.both(() => this.answers), 21500);
+    const picks = this.answers.map(a => a ? a.v : null), pts = [0, 0], pl = this.s.players;
+    for (let g = 0; g < 2; g++) {
+      const c = 1 - g, o = opts[g];
+      if (picks[g] === o.real) { pts[g] += 150 * mult; if (mode !== 'bluff' && made[c]) pts[c] += 100 * mult; }
+      else if (mode === 'bluff' && picks[g] === o.fake) pts[c] += 150 * mult;
+    }
+    pts.forEach((v, i) => pl[i].score += v);
+    this.setStage({ type: 'dReveal', mode, items: items.map(it => it.pub), made, opts: opts.map(o => o.list), real: opts.map(o => o.real), fake: opts.map(o => o.fake), picks, pts, mult });
+    await this.waitFor(this.both(() => this.nexts), 10000);
+  }
+  async comeback(p) {
+    const pl = this.s.players[p], mult = this.mult();
+    await this.intro({ p, ft: 'comeback', icon: '🔥', title: 'COMEBACK-RISIKO!', sub: `${pl.name} setzt alles auf eine Schätzfrage: höchstens 5 % daneben = +${500 * mult}, höchstens 15 % = +${200 * mult}, sonst −150!` }, 3200);
+    const e = this.draw('est', Q.est), q = { kind: 'est', text: e[0], answer: e[1], unit: e[2] };
+    this.curQ = q;
+    const pub = { kind: 'est', text: e[0], unit: e[2] };
+    this.setStage({ type: 'q', q: pub, dur: 25, answered: [false, false], only: p, ft: 'comeback', mult });
+    await this.waitFor(() => this.answers[p], 26500);
+    const a = this.answers[p], v = a && isFinite(+a.v) ? +a.v : null, diff = v == null ? null : Math.abs(v - e[1]), rel = diff == null ? 1 : diff / Math.max(1e-9, Math.abs(e[1]));
+    const pts = [0, 0]; let note;
+    if (rel <= .05) { pts[p] = 500 * mult; note = '🎯 VOLLTREFFER! Das Comeback lebt!'; }
+    else if (rel <= .15) { pts[p] = 200 * mult; note = '🔥 Nah dran – ordentlich Punkte zurückgeholt!'; }
+    else { pts[p] = -Math.min(150, pl.score); note = '💥 Daneben – das Risiko hat sich nicht gelohnt …'; }
+    pl.score += pts[p];
+    const picks = [null, null], diffs = [null, null]; picks[p] = v; diffs[p] = diff;
+    this.setStage({ type: 'reveal', q: pub, answer: e[1], picks, ms: [null, null], pts, correct: [pts[0] > 0, pts[1] > 0], note, diffs, only: p, ft: 'comeback', mult });
+    await this.waitFor(this.both(() => this.nexts), 7000);
   }
   // ---- Computer-Gegner
   botAct(st) {
@@ -430,14 +565,28 @@ class HostGame {
     const later = (ms, fn) => setTimeout(() => { if (this.s.stage.id === id && this.runId === run) fn(); }, ms);
     const act = a => this.onAction(1, a);
     switch (st.type) {
-      case 'roll': if (st.p === 1) later(1100 + rand(700), () => act({ type: 'roll' })); break;
+      case 'roll': if (st.p === 1) later(1100 + rand(700), () => act({ type: st.comeback && Math.random() < .5 ? 'comeback' : 'roll' })); break;
+      case 'dWrite': later(st.mode === 'draw' ? 9000 : 6000 + rand(8000), () => act({ type: 'answer', sid: id, v: this.botMake(st), ms: 0 })); break;
+      case 'dGuess': later(4000 + rand(6000), () => act({ type: 'answer', sid: id, v: Math.random() < .55 ? this.botReal(st) : rand(4), ms: 0 })); break;
       case 'choose': if (st.p === 1) later(2300 + rand(900), () => act({ type: 'choose', i: this.botPick(st) })); break;
-      case 'q': { const dur = st.dur * 1000, ms = Math.min(dur - 400, 1300 + Math.random() * dur * .65); later(ms, () => act({ type: 'answer', sid: id, v: this.botAnswer(st), ms: Math.round(ms) })); break; }
+      case 'q': if (st.only != null && st.only !== 1) break; { const dur = (st.durs ? st.durs[1] : st.dur) * 1000, ms = Math.min(dur - 400, 1300 + Math.random() * dur * .65); later(ms, () => act({ type: 'answer', sid: id, v: this.botAnswer(st), ms: Math.round(ms) })); break; }
       case 'free': later(5000 + rand(7000), () => act({ type: 'answer', sid: id, v: BOT_TEXTS[rand(BOT_TEXTS.length)], ms: 0 })); break;
       case 'rate': later(2000 + rand(3000), () => act({ type: 'answer', sid: id, v: Math.random() < .5 ? 2 : 1, ms: 0 })); break;
-      case 'reveal': case 'rated': case 'vaultResult': later(1200, () => act({ type: 'next', sid: id })); break;
+      case 'reveal': case 'rated': case 'vaultResult': case 'dReveal': later(1200, () => act({ type: 'next', sid: id })); break;
     }
   }
+  botMake(st) {
+    if (st.mode === 'bluff') return BOT_BLUFFS[rand(BOT_BLUFFS.length)];
+    if (st.mode === 'emoji') return shuffle(['🤖', '🎬', '❓', '🔥', '💥', '🧠', '👀', '🎉', '🍕', '🐶']).slice(0, 3).join('');
+    try {
+      const c = document.createElement('canvas'); c.width = c.height = 240; const x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, 240, 240); x.strokeStyle = '#222'; x.lineWidth = 5; x.lineCap = 'round';
+      for (let k = 0; k < 4; k++) { x.beginPath(); x.moveTo(40 + rand(160), 40 + rand(160)); for (let j = 0; j < 6; j++) x.lineTo(30 + rand(180), 30 + rand(180)); x.stroke(); }
+      x.font = '40px serif'; x.fillText('🤖', 10, 50);
+      return c.toDataURL('image/jpeg', .6);
+    } catch (e) { return ''; }
+  }
+  botReal() { return this.lastRealForBot ?? rand(4); }
   botAnswer(st) {
     const q = this.curQ;
     if (q.kind === 'mc' || q.kind === 'tf') {
@@ -446,6 +595,7 @@ class HostGame {
     }
     if (q.kind === 'est') { const v = q.answer * (.65 + Math.random() * .7); return Math.abs(q.answer) < 20 ? Math.round(v * 10) / 10 : Math.round(v); }
     if (q.kind === 'who') return rand(2);
+    if (q.kind === 'mind' && q.subject === 0 && Math.random() < .35) return this.answers[0] ? this.answers[0].v : rand(q.options.length);
     return rand(q.options.length);
   }
   botPick(st) {
@@ -464,20 +614,23 @@ class HostGame {
   tfQ() { const r = this.draw('tf', Q.tf); return { kind: 'tf', text: r[0], options: ['Wahr', 'Falsch'], answer: r[1] ? 0 : 1 }; }
   async ask(q, o = {}) {
     const dur = o.dur || 15, mult = this.mult();
-    const pub = { kind: q.kind, text: q.text, options: q.options, unit: q.unit, subject: q.subject };
-    const base = { cat: q.cat || null, ft: o.ft || null, title: o.title || null, n: o.n || null, of: o.of || null, mover: o.mover ?? null, mult, vault: o.vault || null, keyFor: o.keyFor ?? null };
+    const pub = { kind: q.kind, text: q.text, self: q.self, options: q.options, unit: q.unit, subject: q.subject };
+    const durs = [dur, dur], pl = this.s.players, gap = pl[0].score - pl[1].score;
+    if (['mc', 'tf', 'est'].includes(q.kind) && Math.abs(gap) >= 300) durs[gap > 0 ? 0 : 1] = Math.max(3, Math.round(dur * .7));
+    const base = { cat: q.cat || null, ft: o.ft || null, title: o.title || null, n: o.n || null, of: o.of || null, mover: o.mover ?? null, mult, vault: o.vault || null, keyFor: o.keyFor ?? null, durs };
     this.curQ = q;
     this.setStage(Object.assign({ type: 'q', q: pub, dur, answered: [false, false] }, base));
     await this.waitFor(this.both(() => this.answers), dur * 1000 + 1500);
     const A = this.answers.slice();
-    const res = this.score(q, A, dur, mult);
-    this.setStage(Object.assign({ type: 'reveal', q: pub, answer: q.answer, picks: A.map(a => a ? a.v : null), ms: A.map(a => a ? a.ms : null), pts: res.pts, correct: res.correct, note: res.note, diffs: res.diffs || null }, base));
+    const res = this.score(q, A, durs, mult);
+    const talk = (q.kind === 'who' || q.kind === 'mind') ? this.pools.talk[rand(this.pools.talk.length)] : null;
+    this.setStage(Object.assign({ type: 'reveal', q: pub, answer: q.answer, picks: A.map(a => a ? a.v : null), ms: A.map(a => a ? a.ms : null), pts: res.pts, correct: res.correct, note: res.note, diffs: res.diffs || null, streak: res.streak || 0, talk }, base));
     await this.waitFor(this.both(() => this.nexts), o.revealMs || 6000);
     return res;
   }
-  score(q, A, dur, mult) {
+  score(q, A, durs, mult) {
     const pl = this.s.players, pts = [0, 0], correct = [false, false];
-    let note = '', diffs = null;
+    let note = '', diffs = null, streak = 0;
     if (q.kind === 'mc' || q.kind === 'tf') {
       A.forEach((a, i) => {
         const st = pl[i].stats; st.ans++;
@@ -485,7 +638,7 @@ class HostGame {
         if (a && a.v === q.answer) {
           correct[i] = true; st.right++; st.ms += a.ms;
           if (q.cat) st.cat[q.cat][0]++;
-          pts[i] = Math.round((100 + 100 * Math.max(0, 1 - a.ms / (dur * 1000))) * mult);
+          pts[i] = Math.round((100 + 100 * Math.max(0, 1 - a.ms / (durs[i] * 1000))) * mult);
         }
       });
       if (correct[0] && correct[1]) note = A[0].ms < A[1].ms ? `⚡ ${pl[0].name} war schneller!` : `⚡ ${pl[1].name} war schneller!`;
@@ -500,14 +653,21 @@ class HostGame {
         });
         if (!note) note = correct[0] && correct[1] ? 'Gleich nah dran – Punkte für beide!' : `🎯 ${pl[correct[0] ? 0 : 1].name} war näher dran!`;
       } else note = 'Keiner hat geschätzt 😴';
-    } else if (q.kind === 'who' || q.kind === 'guess') {
+    } else if (q.kind === 'who' || q.kind === 'mind') {
       const match = A[0] && A[1] && A[0].v === A[1].v;
-      const val = (q.kind === 'who' ? 100 : 150) * mult;
-      if (match) { pts[0] = pts[1] = val; correct[0] = correct[1] = true; note = q.kind === 'who' ? 'Einig! 💞 Punkte für beide' : 'Volltreffer! Ihr kennt euch 💞'; }
-      else note = q.kind === 'who' ? 'Uneinig! 🙈 Das müsst ihr ausdiskutieren …' : "Daneben! 🙈 Da gibt's wohl Gesprächsbedarf …";
+      if (match) {
+        correct[0] = correct[1] = true;
+        if (q.kind === 'who') { pts[0] = pts[1] = 100 * mult; note = 'Einig! 💞 Punkte für beide'; }
+        else { pts[1 - q.subject] = 150 * mult; pts[q.subject] = 50 * mult; note = `🧠 Gedanken gelesen! ${pl[1 - q.subject].name} kennt ${pl[q.subject].name} genau.`; }
+        streak = this.s.streak = (this.s.streak || 0) + 1;
+        if (streak >= 3) { pts[0] += 100 * mult; pts[1] += 100 * mult; note += ` 🔥 ${streak}er-Serie: +${100 * mult} Bonus für beide!`; }
+      } else {
+        this.s.streak = 0;
+        note = q.kind === 'who' ? 'Uneinig! 🙈 Das müsst ihr ausdiskutieren …' : `Daneben! 🙈 ${pl[1 - q.subject].name} lag falsch …`;
+      }
     }
     pts.forEach((p, i) => { pl[i].score += p; });
-    return { pts, correct, note, diffs };
+    return { pts, correct, note, diffs, streak };
   }
   async vault(p, cat, idx) {
     const pl = this.s.players[p];
@@ -530,7 +690,7 @@ class HostGame {
     await this.waitFor(this.both(() => this.nexts), 5000);
   }
   async quatsch(p, idx) {
-    const prompt = this.draw('free', Q.free), mult = this.mult();
+    const prompt = this.draw('free', this.pools.free), mult = this.mult();
     await this.intro({ p, field: idx, ft: 'free', icon: '🤪', title: 'QUATSCH-RUNDE', sub: FT.free.sub }, 2200);
     this.setStage({ type: 'free', text: prompt, dur: 30, answered: [false, false], mult });
     await this.waitFor(this.both(() => this.answers), 31500);
@@ -615,6 +775,7 @@ function leaveGame() {
   if (C.host) C.host.runId++;
   Object.assign(C, { net: null, host: null, isHost: false, s: null, stageId: null, boardSig: '' });
   closeSheet(); banner(''); cancelAnimationFrame(C.raf);
+  const fin = $('#finale'); if (fin) fin.remove();
   showHome();
 }
 
@@ -690,6 +851,8 @@ function showCreator(nameMissing) {
       <div class="row"><input class="input" id="own" maxlength="8" placeholder="… oder eigenes Emoji tippen 😏" style="font-size:16px"><button class="btn small" id="ownok">OK</button></div>
       <div class="label">Farbe</div>
       <div class="colors">${COLORS.map(c => `<button class="color ${c === P.color ? 'sel' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
+      ${[['hat', '🎩 Hüte'], ['glasses', '👓 Brillen'], ['aura', '✨ Effekte']].map(([k, l]) => `<div class="label">${l} <span class="muted" style="letter-spacing:0">– durch Spiele & Siege freischalten</span></div>
+      <div class="accs">${ACC[k].map(it => { const ok = isUnlocked(it); return `<button class="acc ${(P[k] || '') === it.v ? 'sel' : ''} ${ok ? '' : 'locked'}" data-k="${k}" data-v="${it.v}" ${ok ? '' : 'disabled'}>${it.v || '🚫'}${ok ? '' : `<small>🔒 ${needText(it.need)}</small>`}</button>`; }).join('')}</div>`).join('')}
     </div>
     <button class="btn pink" id="done" style="margin:14px 0 6px">Fertig ✓</button>`);
   const prev = $('#prev', el), name = $('#name', el);
@@ -708,6 +871,7 @@ function showCreator(nameMissing) {
   };
   $('#ownok', el).onclick = takeOwn; own.addEventListener('keydown', e => { if (e.key === 'Enter') takeOwn(); });
   $$('.color', el).forEach(b => b.onclick = () => { Sound.click(); P.color = b.dataset.c; saveProfile(); $$('.color', el).forEach(x => x.classList.toggle('sel', x === b)); redraw(); });
+  $$('.acc', el).forEach(b => b.onclick = () => { Sound.click(); const k = b.dataset.k; P[k] = b.dataset.v; saveProfile(); $$(`.acc[data-k="${k}"]`, el).forEach(x => x.classList.toggle('sel', x === b)); redraw(); });
   const done = () => { if (!P.name) { name.focus(); name.style.boxShadow = '0 0 0 4px var(--pink)'; vibrate(80); return; } Sound.ok(); showHome(); };
   $('#done', el).onclick = done; $('#back', el).onclick = () => { Sound.click(); showHome(); };
 }
@@ -719,7 +883,8 @@ function showRules() {
     <h3>🔑 Schlüssel sammeln</h3><p>Landest du auf einem Kategorie-Feld, ist es eine <b>Schlüssel-Frage</b>: Antwortest du richtig, gehört dir der Schlüssel dieser Kategorie.</p>
     <h3>🔐 Tresore knacken</h3><p>Hinter jedem Kategorie-Abschnitt wartet ein <b>Tresor</b> mit 3 Fragen. Mit Schlüssel reichen 2 richtige, ohne müssen alle 3 sitzen. Geknackt = 👑 Krone + 300 Punkte. Plane deinen Weg: erst Schlüssel holen, dann zum Tresor!</p>
     <h3>⚔️ Immer im Duell</h3><p>Bei jeder Frage antwortet ihr <b>beide gleichzeitig</b>. Richtig & schnell = bis zu 200 Punkte.</p>
-    <h3>⚡ 🎯 💘 🤪 🎰 Sonderfelder</h3><p><b>Blitzrunde</b> (Wahr/Falsch), <b>Schätz-Duell</b>, <b>Pärchen-Runde</b>, <b>Quatsch-Runde</b> (freie Antwort, der andere bewertet 😂) und das <b>Glücksrad</b>.</p>
+    <h3>🎉 Sonderfelder</h3><p><b>⚡ Blitzrunde</b> (Wahr/Falsch) · <b>🎯 Schätz-Duell</b> · <b>💘 Wer würde eher?</b> · <b>🧠 Gedankenleser</b> (erst liest der eine die Gedanken des anderen, dann umgekehrt) · <b>🃏 Bluffmeister</b> (erfinde eine falsche Antwort und finde die echte) · <b>😜 Emoji-Übersetzer</b> · <b>✏️ Kritzel-Kopf</b> · <b>🤪 Quatsch-Runde</b> · <b>🎰 Glücksrad</b> · <b>❓ Überraschung</b>.</p>
+    <h3>🔥 Serie, Handicap & Comeback</h3><p>3 Übereinstimmungen in Folge bei Pärchen-/Freundes-Fragen bringen Bonuspunkte. Wer deutlich führt, hat bei Wissensfragen weniger Zeit. Wer 400+ Punkte hinten liegt, kann eine <b>Comeback-Risikorunde</b> wagen.</p>
     <h3>🏆 Sieg</h3><p>Nach der gewählten Anzahl Züge gewinnt, wer die meisten Punkte hat. Die letzte Runde zählt doppelt! Wer alle Kronen holt, gewinnt sofort.</p>
     <button class="btn" id="okR" style="margin-top:16px">Alles klar!</button></div>`, '#ffd60a');
   $('#closeR').onclick = $('#okR').onclick = () => { Sound.click(); closeSheet(); };
@@ -787,7 +952,7 @@ function joinGame(code, onFail) {
   let welcomed = false;
   const failT = setTimeout(() => { if (!welcomed) { t.destroy(); C.net = null; onFail('Keine Verbindung möglich. Code richtig? Seid ihr beide online?'); } }, 15000);
   const t = new GuestTransport(code, {
-    onOpen: () => { banner(''); t.send({ t: 'hello', profile: { name: P.name, head: P.head, body: P.body, color: P.color, pid: P.pid } }); },
+    onOpen: () => { banner(''); t.send({ t: 'hello', profile: { name: P.name, head: P.head, body: P.body, color: P.color, hat: P.hat, glasses: P.glasses, aura: P.aura, pid: P.pid } }); },
     onMsg: m => {
       if (m.t === 'welcome') { welcomed = true; clearTimeout(failT); C.me = m.you; }
       else if (m.t === 'state') { if (welcomed) onState(m.s); }
@@ -828,10 +993,12 @@ function renderLobby(s) {
     ${s.code === 'BOT' ? `<div class="card col center"><div class="label">Übungsspiel</div><div style="font-size:44px">🤖</div><div style="font-weight:800">Du spielst gegen Robo, den Computer. Perfekt zum Reinschnuppern!</div></div>` : `<div class="card col center">
       <div class="label">Spiel-Code</div>
       ${codeHTML}
-      ${isHost ? `<p class="muted" style="margin:4px 0 0;font-weight:700;font-size:14px">Dein Schatz gibt diesen Code ein</p>${navigator.share ? '<button class="btn ghost small" id="share" style="align-self:center">📤 Einladung teilen</button>' : ''}` : ''}
+      ${isHost ? `<p class="muted" style="margin:4px 0 0;font-weight:700;font-size:14px">Dein Gegenüber gibt diesen Code ein</p>${navigator.share ? '<button class="btn ghost small" id="share" style="align-self:center">📤 Einladung teilen</button>' : ''}` : ''}
     </div>`}
     <div class="vs" style="margin:14px 0">${slot(pl[0])}<div class="vsx">VS</div>${slot(pl[1])}</div>
     <div class="card col">
+      <div class="label">Wer spielt?</div>
+      <div class="seg two">${[['love', '💘 Verliebt', 'Mit Pärchen- & heißen Fragen'], ['friends', '🤝 Freunde', 'Ohne Romantik-Fragen']].map(([k, n, d]) => `<button data-rel="${k}" class="${(st.relation || 'love') === k ? 'sel' : ''}" ${isHost ? '' : 'disabled'}>${n}<small>${d}</small></button>`).join('')}</div>
       <div class="label">Kategorien</div>
       <div class="seg">${Object.entries(MODES).map(([k, m]) => `<button data-mode="${k}" class="${st.mode === k ? 'sel' : ''}" ${isHost ? '' : 'disabled'}>${m.i} ${m.n}<small>${m.d}</small></button>`).join('')}</div>
       <div class="chips">${chips}</div>
@@ -853,6 +1020,7 @@ function renderLobby(s) {
   if (isHost) {
     $$('[data-t]', el).forEach(b => b.onclick = () => { Sound.click(); act({ type: 'settings', patch: { turns: +b.dataset.t } }); });
     $$('[data-mode]', el).forEach(b => b.onclick = () => { Sound.click(); act({ type: 'settings', patch: { mode: b.dataset.mode } }); });
+    $$('[data-rel]', el).forEach(b => b.onclick = () => { Sound.click(); act({ type: 'settings', patch: { relation: b.dataset.rel } }); });
     $$('.chip', el).forEach(b => b.onclick = () => {
       Sound.click(); const c = b.dataset.cat, cur = st.custom.slice();
       act({ type: 'settings', patch: { custom: cur.includes(c) ? cur.filter(x => x !== c) : cur.concat(c) } });
@@ -938,7 +1106,7 @@ function placeTokens(force) {
   const s = C.s; if (!s || C.screen !== 'game') return;
   s.players.forEach((pl, p) => {
     const tk = $('#tk' + p); if (!tk) return;
-    const sig = pl.head + pl.body + pl.color;
+    const sig = pl.head + pl.body + pl.color + (pl.hat || '') + (pl.glasses || '') + (pl.aura || '');
     if (C.tokenSig[p] !== sig) { C.tokenSig[p] = sig; $('.hopper', tk).innerHTML = figureHTML(pl); }
     tk.classList.toggle('me', p === C.me);
     tk.style.setProperty('--pc', pl.color);
@@ -1046,14 +1214,17 @@ function choose(i) {
 
 function enterStage(st, s) {
   const mine = st.p === C.me;
+  const fin = $('#finale'); if (fin && st.type !== 'end') fin.remove();
   C.chose = false;
   switch (st.type) {
     case 'roll': {
       closeSheet();
       setStatus(mine ? '🎲🎲 Du bist dran – würfle!' : `${nameOf(st.p)} ist dran …`);
       if (mine) {
-        const ab = setAction(`<button class="btn pink rollbtn" id="roll">🎲🎲 Würfeln!</button>`);
-        $('#roll', ab).onclick = e => { e.currentTarget.disabled = true; Sound.click(); vibrate(30); act({ type: 'roll' }); };
+        const ab = setAction(st.comeback ? `<div class="tgrid"><button class="btn pink rollbtn" id="roll" style="font-size:18px">🎲🎲 Würfeln</button><button class="btn" id="cb" style="font-size:15px;background:var(--red);color:#fff">🔥 Comeback-Risiko</button></div>` : `<button class="btn pink rollbtn" id="roll">🎲🎲 Würfeln!</button>`);
+        $('#roll', ab).onclick = e => { $$('#ab button').forEach(b => b.disabled = true); Sound.click(); vibrate(30); act({ type: 'roll' }); };
+        const cb = $('#cb', ab); if (cb) cb.onclick = () => { $$('#ab button').forEach(b => b.disabled = true); Sound.whoosh(); act({ type: 'comeback' }); };
+        if (st.comeback) setStatus(`🔥 Du liegst ${st.gap} Punkte hinten – wagst du das Comeback?`);
         vibrate([40, 60, 40]);
       } else setAction(`<div class="waitbar">⏳ ${nameOf(st.p)} würfelt gleich …</div>`);
       break;
@@ -1095,11 +1266,15 @@ function enterStage(st, s) {
     case 'rated': renderRated(st, s); break;
     case 'vaultResult': renderVaultResult(st, s); break;
     case 'luck': renderLuck(st, s); break;
+    case 'surprise': renderLuck(st, s, true); break;
+    case 'dWrite': renderDWrite(st, s); break;
+    case 'dGuess': renderDGuess(st, s); break;
+    case 'dReveal': renderDReveal(st, s); break;
     case 'end': renderEnd(s); break;
   }
 }
 function updateStage(st, s) {
-  if (['q', 'free', 'rate'].includes(st.type)) {
+  if (['q', 'free', 'rate', 'dWrite', 'dGuess'].includes(st.type)) {
     const opp = 1 - C.me, el = $('#opp');
     if (el && st.answered[opp] && !el.classList.contains('done')) { el.classList.add('done'); el.innerHTML = `⚡ ${nameOf(opp)} hat schon geantwortet!`; Sound.tick(); vibrate(15); }
   }
@@ -1128,7 +1303,8 @@ function stagePill(st) {
 }
 function headHTML(st) {
   const key = st.keyFor != null ? `<span class="pill keypill">🔑 ${st.keyFor === C.me ? 'Dein Schlüssel!' : 'Schlüssel für ' + nameOf(st.keyFor)}</span>` : '';
-  return `<div class="qhead">${stagePill(st)}${key}<div class="spacer"></div>${st.mult > 1 ? '<span class="pill x2">🔥 x2</span>' : ''}${st.title ? `<span class="pill dark">${esc(st.title)}</span>` : ''}</div>`;
+  const hc = st.durs && st.durs[0] !== st.durs[1] ? `<span class="pill dark" title="Der Führende hat weniger Zeit">⏱️ ${st.durs[C.me] < st.durs[1 - C.me] ? 'Handicap: du!' : 'Handicap: ' + nameOf(1 - C.me)}</span>` : '';
+  return `<div class="qhead">${stagePill(st)}${key}${hc}<div class="spacer"></div>${st.mult > 1 ? '<span class="pill x2">🔥 x2</span>' : ''}${st.title ? `<span class="pill dark">${esc(st.title)}</span>` : ''}</div>`;
 }
 function vaultPips(v, marks) {
   if (!v) return '';
@@ -1156,16 +1332,17 @@ function renderKeyGot(st, s) {
   Sound.fanfare(); if (mine) burst(50); vibrate([30, 30, 80]);
 }
 
+function myDur(st) { return st.durs ? st.durs[C.me] : st.dur; }
 function startTimer(st, onEnd) {
-  const bar = $('#tbar'), wrap = $('#timer');
+  const bar = $('#tbar'), wrap = $('#timer'), D = myDur(st);
   let lastSec = 99, ended = false;
   const loop = () => {
     if (C.stageId !== st.id) return;
-    const el = (performance.now() - C.t0) / 1000, rem = Math.max(0, st.dur - el);
-    if (bar) bar.style.transform = `scaleX(${rem / st.dur})`;
+    const el = (performance.now() - C.t0) / 1000, rem = Math.max(0, D - el);
+    if (bar) bar.style.transform = `scaleX(${rem / D})`;
     if (wrap) wrap.classList.toggle('warn', rem < 4);
     const sec = Math.ceil(rem);
-    if (sec !== lastSec && sec <= 3 && sec > 0 && C.myAns == null) Sound.tick();
+    if (sec !== lastSec && sec <= 3 && sec > 0 && C.myAns == null) Sound.countdown(sec);
     lastSec = sec;
     if (rem <= 0 && !ended) { ended = true; onEnd && onEnd(); return; }
     C.raf = requestAnimationFrame(loop);
@@ -1176,7 +1353,7 @@ function answer(st, v) {
   if (C.myAns != null || C.stageId !== st.id) return false;
   C.myAns = v;
   act({ type: 'answer', sid: st.id, v, ms: Math.round(performance.now() - C.t0) });
-  vibrate(20); Sound.click();
+  vibrate(20); Sound.sent();
   return true;
 }
 function oppLine(st) {
@@ -1185,10 +1362,10 @@ function oppLine(st) {
 }
 function questionText(st) {
   const q = st.q;
-  if (q.kind === 'guess') {
-    const subj = q.subject === C.me;
-    return subj ? `<div class="qtext">${esc(q.text)}</div><div class="qsub">💬 Antworte ehrlich – ${nameOf(1 - C.me)} muss raten!</div>`
-      : `<div class="qsub" style="margin:0 0 4px">🔮 Was antwortet ${nameOf(q.subject)}?</div><div class="qtext">„${esc(q.text)}“</div>`;
+  if (q.kind === 'mind') {
+    const subj = q.subject === C.me, other = C.s.players[q.subject];
+    return subj ? `<div class="mindtag self">🔒 Du antwortest ehrlich – ${nameOf(1 - C.me)} versucht deine Gedanken zu lesen!</div><div class="qtext">${esc(q.self)}</div>`
+      : `<div class="mindtag">🧠 Du bist Gedankenleser*in! ${esc(other.name)} antwortet gerade ehrlich.</div><div class="qtext">${esc(q.text.replace(/\{X\}/g, other.name))}</div>`;
   }
   return `<div class="qtext">${esc(q.text)}</div>`;
 }
@@ -1201,6 +1378,11 @@ function optsHTML(st) {
 
 function renderQuestion(st, s) {
   const q = st.q, color = stageColor(st);
+  if (st.only != null && st.only !== C.me) {
+    setAction(`<div class="waitbar">👀 ${nameOf(st.only)} riskiert alles …</div>`);
+    openSheet(`${headHTML(st)}<div class="intro"><div class="big-emoji">🍿</div><h2 style="--cc:var(--red)">ZUSCHAUEN!</h2><p>${nameOf(st.only)} spielt die Comeback-Runde:</p></div><div class="qtext center">${esc(q.text)}</div>`, color);
+    return;
+  }
   setAction(`<div class="waitbar">🧠 Antwortet!</div>`);
   let body;
   if (q.kind === 'est') {
@@ -1239,7 +1421,7 @@ function resultBoxes(st, extra) {
   const order = [C.me, 1 - C.me];
   return `<div class="result">${order.map(i => {
     const p = C.s.players[i], pts = st.pts[i], win = pts > 0;
-    return `<div class="rbox ${win ? 'win' : ''}" style="--pc:${p.color}">${st.correct && st.correct[i] ? '<span class="badge">✅</span>' : ''}<div class="ra">${esc(p.head)}</div><div style="font-weight:800;font-size:13px">${esc(p.name)}</div><div class="rp" style="color:${win ? 'var(--lime)' : 'var(--muted)'}">+${pts}</div>${extra ? extra(i) : ''}</div>`;
+    return `<div class="rbox ${win ? 'win' : ''}" style="--pc:${p.color}">${st.correct && st.correct[i] ? '<span class="badge">✅</span>' : ''}<div class="ra">${esc(p.head)}</div><div style="font-weight:800;font-size:13px">${esc(p.name)}</div><div class="rp" style="color:${win ? 'var(--lime)' : pts < 0 ? 'var(--red)' : 'var(--muted)'}">${pts < 0 ? '−' + Math.abs(pts) : '+' + pts}</div>${extra ? extra(i) : ''}</div>`;
   }).join('')}</div>`;
 }
 const nextBtn = () => `<button class="btn ghost next" id="next">Weiter ▶</button>`;
@@ -1252,7 +1434,7 @@ function renderReveal(st, s) {
   const q = st.q, color = stageColor(st), me = C.me;
   setAction(`<div class="waitbar">📊 Auflösung</div>`);
   let body = '', extra = null;
-  if (q.kind === 'mc' || q.kind === 'tf' || q.kind === 'who' || q.kind === 'guess') {
+  if (q.kind === 'mc' || q.kind === 'tf' || q.kind === 'who' || q.kind === 'mind') {
     body = questionText(st) + optsHTML(st);
     extra = i => `<div class="rt">${st.picks[i] == null ? 'keine Antwort' : (q.kind === 'mc' || q.kind === 'tf') ? msTxt(st.ms[i]) : ''}</div>`;
   } else if (q.kind === 'est') {
@@ -1262,6 +1444,8 @@ function renderReveal(st, s) {
   const keyNote = st.keyFor != null ? `<div class="center keynote">${st.correct[st.keyFor] ? `🔑 ${st.keyFor === me ? 'Du bekommst' : nameOf(st.keyFor) + ' bekommt'} den Schlüssel!` : `🔒 Kein Schlüssel für ${st.keyFor === me ? 'dich' : nameOf(st.keyFor)}.`}</div>` : '';
   const panel = openSheet(`${headHTML(st)}${st.vault ? vaultPips(st.vault, st.vault.marks.concat([st.correct[st.vault.p] ? 1 : 0])) : ''}${body}
     ${st.note ? `<div class="center" style="font-weight:900;font-size:17px;margin-top:14px">${esc(st.note)}</div>` : ''}${keyNote}
+    ${st.streak >= 2 ? `<div class="streak">${'🔥'.repeat(Math.min(st.streak, 6))} ${st.streak}er-Übereinstimmungsserie!</div>` : ''}
+    ${st.talk ? `<div class="talk">💬 <b>Redet kurz drüber:</b> ${esc(st.talk)}</div>` : ''}
     ${resultBoxes(st, extra)}${nextBtn()}`, color);
   const opts = $('#opts', panel);
   if (opts) {
@@ -1274,13 +1458,14 @@ function renderReveal(st, s) {
           const p = s.players[i];
           b.querySelector('.who').insertAdjacentHTML('beforeend', `<span style="--pc:${p.color}">${esc(p.head)}</span>`);
           if ((q.kind === 'mc' || q.kind === 'tf') && v !== st.answer) b.classList.add('wrong');
-          if (q.kind === 'who' || q.kind === 'guess') b.classList.add(st.correct[0] ? 'right' : 'picked');
+          if (q.kind === 'who' || q.kind === 'mind') b.classList.add(st.correct[0] ? 'right' : 'picked');
         }
       });
     });
   }
-  if (q.kind === 'who' || q.kind === 'guess') { if (st.correct[0]) { Sound.ok(); burst(40); } else Sound.sad(); }
-  else if (st.correct[me]) { Sound.ok(); vibrate(30); if (st.pts[me] >= 180) burst(25); }
+  if (q.kind === 'who' || q.kind === 'mind') { if (st.correct[0]) { st.streak >= 3 ? Sound.jackpot() : Sound.hit(); burst(st.streak >= 3 ? 90 : 40); } else Sound.sad(); }
+  else if (st.only != null) { if (st.pts[st.only] >= 500) { Sound.jackpot(); burst(120); } else if (st.pts[st.only] > 0) Sound.hit(); else Sound.bad(); }
+  else if (st.correct[me]) { st.note && st.note.includes('VOLLTREFFER') ? Sound.jackpot() : Sound.hit(); vibrate(30); if (st.pts[me] >= 180) burst(25); }
   else { Sound.bad(); vibrate([80, 40, 80]); }
   wireNext(panel, st);
 }
@@ -1336,14 +1521,14 @@ function renderVaultResult(st, s) {
   if (st.success) { Sound.fanfare(); burst(mine ? 120 : 60); vibrate([50, 50, 50, 50, 200]); } else { Sound.sad(); vibrate(200); }
   wireNext(panel, st);
 }
-function renderLuck(st, s) {
+function renderLuck(st, s, surprise) {
   const items = st.items, list = [];
   for (let r = 0; r < 4; r++) list.push(...items);
   list.push(...items.slice(0, st.pick + 1));
   const finalIdx = list.length - 1;
   highlightField(st.field);
   setAction(`<div class="waitbar">🎰 Glücksrad dreht …</div>`);
-  const panel = openSheet(`<div class="intro"><div class="big-emoji">🎰</div><h2 style="--cc:var(--yellow)">GLÜCKSRAD</h2><p>${st.p === C.me ? 'Du drehst' : nameOf(st.p) + ' dreht'} am Rad …</p></div>
+  const panel = openSheet(`<div class="intro"><div class="big-emoji">${surprise ? '❓' : '🎰'}</div><h2 style="--cc:var(--yellow)">${surprise ? 'ÜBERRASCHUNG!' : 'GLÜCKSRAD'}</h2><p>${surprise ? 'Welcher Modus wird es?' : (st.p === C.me ? 'Du drehst' : nameOf(st.p) + ' dreht') + ' am Rad …'}</p></div>
     <div class="reel"><div class="strip" id="strip">${list.map(l => `<div class="it">${esc(l)}</div>`).join('')}</div></div>`, FT.luck.c);
   const strip = $('#strip', panel);
   requestAnimationFrame(() => requestAnimationFrame(() => { strip.style.transform = `translateY(${-(finalIdx * 58) + 3}px)`; }));
@@ -1351,10 +1536,130 @@ function renderLuck(st, s) {
   setTimeout(() => { if (C.stageId === st.id) { strip.children[finalIdx].style.background = 'var(--yellow)'; Sound.ok(); vibrate(60); } }, 2500);
 }
 
+/* ---------- Bluffmeister / Emoji-Übersetzer / Kritzel-Kopf ---------- */
+const stripLetters = v => v.replace(/[\p{L}\p{N}\s.,!?;:'"()\-_/\\]/gu, '');
+function renderDWrite(st, s) {
+  const it = st.items[C.me], mode = st.mode, color = FT[mode].c;
+  setAction(`<div class="waitbar">${FT[mode].i} Ihr seid beide gleichzeitig dran!</div>`);
+  let body;
+  if (mode === 'bluff') body = `<div class="qtext">${esc(it.q)}</div><div class="truth">✅ Echte Antwort: <b>${esc(it.real)}</b></div>
+      <div class="label" style="margin:12px 0 6px">Erfinde eine falsche Antwort, die echt klingt:</div>
+      <textarea class="input" id="dtxt" maxlength="90" placeholder="Dein Bluff …"></textarea><button class="btn lime" id="dsend" style="margin-top:10px">Bluff abschicken 🃏</button>`;
+  else if (mode === 'emoji') body = `<div class="qsub" style="margin:0 0 4px">Stelle diesen ${esc(it.type === 'Film' ? 'Film' : it.type === 'Redewendung' ? 'Spruch' : 'Moment')} nur mit Emojis dar:</div><div class="qtext">„${esc(it.term)}“</div>
+      <input class="input emoji-in" id="dtxt" maxlength="40" placeholder="😜🎬🦁 …" autocomplete="off" inputmode="text"><div class="muted center" style="font-size:12px;font-weight:700;margin-top:6px">Buchstaben & Zahlen werden automatisch gelöscht 😉</div>
+      <button class="btn lime" id="dsend" style="margin-top:10px">Abschicken 😜</button>`;
+  else body = `<div class="qsub" style="margin:0 0 4px">Zeichne in 15 Sekunden:</div><div class="qtext">„${esc(it.term)}“</div>
+      <div class="canvaswrap"><canvas id="cv" width="260" height="260"></canvas></div>
+      <div class="tgrid" style="margin-top:10px"><button class="btn ghost small" id="clr" style="width:100%">🧽 Löschen</button><button class="btn lime small" id="dsend" style="width:100%">Fertig ✓</button></div>`;
+  const panel = openSheet(`<div class="qhead"><span class="pill" style="--cc:${color}">${FT[mode].i} ${FT[mode].n}</span><div class="spacer"></div>${st.mult > 1 ? '<span class="pill x2">🔥 x2</span>' : ''}</div>
+    <div class="timer" id="timer"><i id="tbar"></i></div>${body}${oppLine(st)}`, color);
+  const send = $('#dsend', panel);
+  let getVal;
+  if (mode === 'draw') {
+    const cv = $('#cv', panel), x = cv.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, 260, 260); x.lineCap = x.lineJoin = 'round'; x.lineWidth = 6; x.strokeStyle = '#1a1033';
+    let drawing = false, last = null;
+    const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * 260 / r.width, (e.clientY - r.top) * 260 / r.height]; };
+    cv.addEventListener('pointerdown', e => { if (C.myAns != null) return; drawing = true; last = pos(e); cv.setPointerCapture(e.pointerId); x.beginPath(); x.arc(last[0], last[1], 3, 0, 7); x.fillStyle = '#1a1033'; x.fill(); e.preventDefault(); });
+    cv.addEventListener('pointermove', e => { if (!drawing) return; const p2 = pos(e); x.beginPath(); x.moveTo(last[0], last[1]); x.lineTo(p2[0], p2[1]); x.stroke(); last = p2; e.preventDefault(); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => cv.addEventListener(ev, () => drawing = false));
+    $('#clr', panel).onclick = () => { if (C.myAns != null) return; x.fillStyle = '#fff'; x.fillRect(0, 0, 260, 260); Sound.click(); };
+    getVal = () => cv.toDataURL('image/jpeg', .55);
+  } else {
+    const inp = $('#dtxt', panel);
+    if (mode === 'emoji') inp.addEventListener('input', () => { const v = stripLetters(inp.value); if (v !== inp.value) inp.value = v; });
+    setTimeout(() => inp.focus(), 400);
+    getVal = () => mode === 'emoji' ? stripLetters(inp.value).trim() : inp.value.trim();
+  }
+  const submit = force => {
+    const v = getVal();
+    if (!v && !force && mode !== 'draw') { vibrate(60); return; }
+    if (answer(st, v)) { send.disabled = true; send.textContent = 'Abgeschickt ✓'; const i = $('#dtxt', panel); if (i) { i.disabled = true; i.blur(); } }
+  };
+  send.onclick = () => submit(false);
+  startTimer(st, () => { if (C.myAns == null) submit(true); });
+}
+function dShow(mode, made, prompt, big) {
+  if (mode === 'draw') return made ? `<div class="canvaswrap"><img class="drawing" src="${esc(made)}" alt="Zeichnung"></div>` : `<div class="quote" style="opacity:.6">🙈 Keine Zeichnung abgegeben</div>`;
+  if (mode === 'emoji') return `<div class="emoji-show ${big ? '' : 'small'}">${made ? esc(made) : '🤷'}</div>`;
+  return `<div class="qtext">${esc(prompt)}</div>`;
+}
+function renderDGuess(st, s) {
+  const mode = st.mode, other = 1 - C.me, color = FT[mode].c, opts = st.opts[C.me];
+  setAction(`<div class="waitbar">🤔 Rätselt!</div>`);
+  const title = mode === 'bluff' ? `Welche Antwort ist echt? Eine davon hat ${nameOf(other)} erfunden!` : mode === 'emoji' ? `${nameOf(other)} hat gemeint (${esc(st.prompt[C.me])}) …` : `Was hat ${nameOf(other)} gezeichnet?`;
+  const panel = openSheet(`<div class="qhead"><span class="pill" style="--cc:${color}">${FT[mode].i} ${FT[mode].n}</span><div class="spacer"></div>${st.mult > 1 ? '<span class="pill x2">🔥 x2</span>' : ''}</div>
+    <div class="timer" id="timer"><i id="tbar"></i></div><div class="qsub" style="margin:0 0 8px">${title}</div>
+    ${dShow(mode, st.made[other], st.prompt[C.me], true)}
+    <div class="opts" id="opts" style="margin-top:12px">${opts.map((o, i) => `<button class="opt" data-v="${i}"><span class="k">${'ABCD'[i]}</span><span>${esc(o)}</span><span class="who"></span></button>`).join('')}</div>${oppLine(st)}`, color);
+  const lock = () => $('#opts', panel).classList.add('locked');
+  $$('#opts .opt', panel).forEach(b => b.onclick = () => { if (answer(st, +b.dataset.v)) { b.classList.add('picked'); lock(); } });
+  startTimer(st, () => { if (C.myAns == null) { lock(); Sound.bad(); } });
+}
+function renderDReveal(st, s) {
+  const mode = st.mode, color = FT[mode].c;
+  setAction(`<div class="waitbar">📊 Auflösung</div>`);
+  const card = c => {
+    const g = 1 - c, p = s.players[c], q = s.players[g], it = st.items[c], pick = st.picks[g], o = st.opts[g];
+    const real = o[st.real[g]], picked = pick == null ? null : o[pick];
+    let verdict;
+    if (pick === st.real[g]) verdict = `✅ ${esc(q.name)} hat's erkannt!`;
+    else if (mode === 'bluff' && pick === st.fake[g]) verdict = `🃏 ${esc(q.name)} ist auf den Bluff reingefallen!`;
+    else verdict = pick == null ? `😴 ${esc(q.name)} hat nicht getippt` : `❌ ${esc(q.name)} tippte „${esc(picked)}“`;
+    const what = mode === 'bluff' ? `<div class="qsub" style="margin:6px 0">${esc(it.q)}</div><div class="truth">✅ ${esc(real)}</div><div class="bluffline">🃏 Bluff: „${esc(st.made[c] || '—')}“</div>`
+      : mode === 'emoji' ? `${dShow(mode, st.made[c], '', false)}<div class="truth">= ${esc(it.term)}</div>` : `${dShow(mode, st.made[c])}<div class="truth">= ${esc(it.term)}</div>`;
+    return `<div class="dcard" style="--pc:${p.color}"><div class="row" style="gap:8px"><span style="font-size:24px">${esc(p.head)}</span><b>${esc(p.name)}</b><div class="spacer"></div><b class="dpts">+${st.pts[c]}</b></div>${what}<div class="verdict">${verdict}</div></div>`;
+  };
+  const panel = openSheet(`<div class="qhead"><span class="pill" style="--cc:${color}">${FT[mode].i} Auflösung</span><div class="spacer"></div>${st.mult > 1 ? '<span class="pill x2">🔥 x2</span>' : ''}</div>
+    ${card(C.me)}${card(1 - C.me)}${nextBtn()}`, color);
+  const g = C.me;
+  if (st.picks[g] === st.real[g]) { Sound.hit(); burst(40); } else if (mode === 'bluff' && st.picks[1 - g] === st.fake[1 - g]) { Sound.jackpot(); burst(50); } else Sound.bad();
+  wireNext(panel, st);
+}
+
 /* ---------- Ende ---------- */
+function verdictLine(w, l, diff) {
+  const W = w.toUpperCase(), L = l.toUpperCase();
+  if (diff >= 1500) return [`${W} HAT ${L} KOMPLETT ZERLEGT!`, 'Das war keine Kopfnuss – das war ein Vorschlaghammer. 🔨'];
+  if (diff >= 800) return [`${W} MACHT KURZEN PROZESS MIT ${L}!`, `${l}, das schreit nach Revanche. 😤`];
+  if (diff >= 300) return [`${W} SCHLÄGT ${L} VERDIENT!`, 'Klare Sache – aber noch kein Grund zum Angeben. 😏'];
+  return [`${W} GEWINNT HAUCHDÜNN GEGEN ${L}!`, 'Ein Krimi bis zur letzten Sekunde! 😱'];
+}
+function showFinale(s, after) {
+  const pl = s.players, tie = pl[0].score === pl[1].score, win = pl[0].score >= pl[1].score ? 0 : 1, lose = 1 - win;
+  const max = Math.max(1, pl[0].score, pl[1].score);
+  const [head, sub] = tie ? ['UNENTSCHIEDEN!', 'Ihr seid einfach ein perfektes Team 💞'] : verdictLine(pl[win].name, pl[lose].name, pl[win].score - pl[lose].score);
+  const el = document.createElement('div'); el.id = 'finale';
+  el.innerHTML = `<div class="fin-rays"></div><div class="fin-title">Und der Sieg geht an …</div>
+    <div class="fin-race">${[C.me, 1 - C.me].map(i => `<div class="lane" style="--pc:${pl[i].color}"><div class="lfig">${figureHTML(pl[i], 'idle')}</div><div class="lbar"><i data-w="${Math.round(pl[i].score / max * 100)}"></i><b class="lsc" data-to="${pl[i].score}">0</b></div></div>`).join('')}</div>
+    <div class="fin-win ${tie ? 'tie' : ''}"><div class="fin-crown">${tie ? '🤝' : '👑'}</div><div class="fin-fig">${tie ? figureHTML(pl[0], 'idle') + figureHTML(pl[1], 'idle') : figureHTML(pl[win], 'idle')}</div><div class="fin-head">${esc(head)}</div><div class="fin-sub">${esc(sub)}</div><div class="fin-tap">👆 Tippen für Details</div></div>`;
+  document.body.appendChild(el);
+  Sound.drumroll(2.6);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    $$('.lbar i', el).forEach(i => i.style.width = i.dataset.w + '%');
+    $$('.lsc', el).forEach(b => countUp(b, 0, +b.dataset.to));
+  }));
+  setTimeout(() => { el.classList.add('reveal'); (tie || win === C.me) ? Sound.win() : Sound.sad(); confettiRain(); burst(120); vibrate([60, 40, 60, 40, 250]); }, 2900);
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; el.classList.add('out'); setTimeout(() => { el.remove(); after(); }, 450); };
+  setTimeout(() => el.addEventListener('click', close), 3300);
+  setTimeout(close, 11000);
+}
+function trackUnlocks(s) {
+  const u = unlockState(); if (u.done.includes(s.gameId)) return;
+  const before = Object.values(ACC).flat().filter(isUnlocked).map(i => i.v);
+  u.g++; if (s.players[C.me].score > s.players[1 - C.me].score) u.w++;
+  u.done = u.done.concat(s.gameId).slice(-30); store.set('kn_unlock', u);
+  const neu = Object.values(ACC).flat().filter(isUnlocked).map(i => i.v).filter(v => !before.includes(v));
+  if (neu.length) setTimeout(() => { toast(`🎁 Neu freigeschaltet: ${neu.join(' ')} – ab in den Figuren-Baukasten!`); Sound.key(); }, 4200);
+}
 function renderEnd(s) {
   cancelAnimationFrame(C.raf);
-  recordGame(s, C.me);
+  recordGame(s, C.me); trackUnlocks(s);
+  closeSheet(); setAction(''); setStatus('');
+  showFinale(s, () => { if (C.s && C.s.stage.type === 'end') renderEndDetails(s); });
+}
+function renderEndDetails(s) {
   const pl = s.players, order = [0, 1].sort((a, b) => pl[b].score - pl[a].score);
   const tie = pl[0].score === pl[1].score, win = order[0];
   const avg = p => p.stats.right ? p.stats.ms / p.stats.right : Infinity;
@@ -1373,7 +1678,6 @@ function renderEnd(s) {
     <div class="podium">${pod(order[1], 'second')}${pod(order[0], 'first')}</div>
     <div class="awards">${awards.map(a => `<div class="award"><b>${a[0]}</b><div><div style="font-weight:900">${a[1]}</div><div class="muted">${a[2]}</div></div></div>`).join('')}</div>
     <div class="col" style="margin-top:14px">${C.isHost ? '<button class="btn pink" id="again">🔁 Revanche!</button>' : '<div class="waitbar">⏳ Warte, ob ' + nameOf(0) + ' Revanche will …</div>'}<button class="btn ghost" id="menu">Zum Menü</button></div>`, '#ffd60a');
-  if (meWon || tie) { Sound.fanfare(); confettiRain(); } else Sound.sad();
   const ag = $('#again', panel); if (ag) ag.onclick = () => { Sound.click(); act({ type: 'rematch' }); };
   $('#menu', panel).onclick = () => { Sound.click(); leaveGame(); };
 }
