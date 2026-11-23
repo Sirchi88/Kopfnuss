@@ -18,8 +18,10 @@ Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in de
 - **Figur basteln:** Wähle Körper (Mann/Frau), ein beliebiges Emoji als Kopf und eine Farbe.
 - **Taktisch würfeln:** Du würfelst mit 2 Würfeln und wählst, welchen du nimmst und ob du vor- oder rückwärts läufst. Bei einem Pasch darfst du auch doppelt so weit gehen. Die möglichen Ziele leuchten auf dem 3D-Brett.
 - **Immer im Duell:** Jede Frage beantwortet ihr **beide gleichzeitig**. Richtig und schnell bringt bis zu 200 Punkte.
-- **🔑 Schlüssel-Fragen:** Wer auf einem Kategorie-Feld richtig antwortet, bekommt den Schlüssel dieser Kategorie.
-- **🔐 Tresore:** Jeder Tresor hat 3 Fragen. Mit Schlüssel reichen 2 richtige, ohne müssen alle 3 stimmen. Ein geknackter Tresor bringt 👑 und +300.
+- **🗺️ Großes Brett (9×11):** Außen ein Ring, vier Wege führen nach innen in den **🏛️ Tresorraum**. An Kreuzungen wählst du selbst die Richtung.
+- **🔑 Schlüssel sammeln:** Kategorie-Felder im Ring sind Schlüssel-Fragen. Pro Kategorie brauchst du **3 Schlüssel**.
+- **🔐 Tresore:** Erst mit 3 Schlüsseln einer Kategorie darfst du in den Tresorraum. Dort reichen 2 von 3 richtigen Fragen, das bringt 👑 und +300.
+- **Keine Wiederholungen:** Die App merkt sich gespielte Fragen über Spiele hinweg. Eine Frage kommt erst wieder, wenn alle anderen ihres Stapels durch sind. Insgesamt sind es über 1.700 Fragen und Aufgaben.
 - **Sonderfelder**
   - ⚡ **Blitzrunde:** Wahr/Falsch mit je 5 Sekunden
   - 🎯 **Schätz-Duell:** Wer näher dran ist, gewinnt
@@ -57,7 +59,7 @@ Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in de
 > Oder ihr zieht den Ordner per Drag & Drop auf https://app.netlify.com/drop.
 
 ## Technik
-- Reines HTML/CSS/JS ohne Build-Schritt. Die Fragen stehen in `questions.js` und `questions-extra.js` (über 1.100 Stück) und lassen sich leicht erweitern.
+- Reines HTML/CSS/JS ohne Build-Schritt. Die Fragen stehen in `questions*.js` (über 1.700 Stück) und lassen sich leicht erweitern.
 - Die Handys verbinden sich direkt per WebRTC über [PeerJS](https://peerjs.com) (`peerjs.min.js`, MIT-Lizenz). Der Code dient nur als Treffpunkt.
 - Das Handy des Hosts steuert das Spiel, das andere zeigt nur den Zustand an.
 - Testmodus am PC: `index.html?local` in zwei Tabs öffnen. Die Verbindung läuft dann über den Browser statt übers Internet.

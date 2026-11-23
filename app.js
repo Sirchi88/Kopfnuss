@@ -57,40 +57,77 @@ const FT = {
   est:   { i: '🎯', n: 'Schätz-Duell', c: '#22d3ff', sub: 'Wer näher dran ist, gewinnt. Volltreffer = Extrabonus!' },
   luck:  { i: '🎰', n: 'Glücksrad', c: '#ffd60a', sub: 'Alles kann passieren …' },
 };
-const N = 30;
-function gridPos(i) { // 7 Spalten x 10 Zeilen, im Uhrzeigersinn ab unten links
-  if (i <= 9) return [1, 10 - i];
-  if (i <= 15) return [i - 8, 1];
-  if (i <= 24) return [7, i - 14];
-  return [31 - i, 10];
+// Brett: äußerer Ring (Schlüssel sammeln) + 4 Wege nach innen + Tresorraum (Ring) in der Mitte
+const COLS = 9, ROWS = 11, KEYS_NEEDED = 3;
+const NODES = [], ADJ = [];
+(() => {
+  const add = (c, r, zone) => { NODES.push({ c, r, zone }); ADJ.push([]); return NODES.length - 1; };
+  const link = (a, b) => { ADJ[a].push(b); ADJ[b].push(a); };
+  const ring = [];
+  for (let r = 10; r >= 0; r--) ring.push(add(0, r, 'ring'));
+  for (let c = 1; c <= 8; c++) ring.push(add(c, 0, 'ring'));
+  for (let r = 1; r <= 10; r++) ring.push(add(8, r, 'ring'));
+  for (let c = 7; c >= 1; c--) ring.push(add(c, 10, 'ring'));
+  ring.forEach((n, i) => link(n, ring[(i + 1) % ring.length]));
+  const at = (c, r) => NODES.findIndex(n => n.c === c && n.r === r);
+  const hub = [[3, 7], [3, 6], [3, 5], [3, 4], [3, 3], [4, 3], [5, 3], [5, 4], [5, 5], [5, 6], [5, 7], [4, 7]].map(([c, r]) => add(c, r, 'hub'));
+  hub.forEach((n, i) => link(n, hub[(i + 1) % hub.length]));
+  const spoke = (ringPt, a, b, hubPt) => { const x = add(a[0], a[1], 'spoke'), y = add(b[0], b[1], 'spoke'); link(at(...ringPt), x); link(x, y); link(y, at(...hubPt)); };
+  spoke([0, 5], [1, 5], [2, 5], [3, 5]);
+  spoke([4, 0], [4, 1], [4, 2], [4, 3]);
+  spoke([8, 5], [7, 5], [6, 5], [5, 5]);
+  spoke([4, 10], [4, 9], [4, 8], [4, 7]);
+})();
+const N = NODES.length;
+const RING = NODES.map((n, i) => n.zone === 'ring' ? i : -1).filter(i => i >= 0);
+const HUB = NODES.map((n, i) => n.zone === 'hub' ? i : -1).filter(i => i >= 0);
+const SPOKES = NODES.map((n, i) => n.zone === 'spoke' ? i : -1).filter(i => i >= 0);
+const gridPos = i => [NODES[i].c + 1, NODES[i].r + 1];
+const keyCount = (pl, c) => +pl.keys[c] || 0;
+const canEnterVaults = pl => Object.keys(pl.keys).some(c => keyCount(pl, c) >= KEYS_NEEDED && !pl.crowns[c]);
+// alle Ziele mit genau n Schritten (ohne direkt umzudrehen); Tresorraum nur mit vollem Schlüsselbund
+function walks(from, n, canHub) {
+  const res = new Map();
+  const dfs = (node, prev, path, allowBack) => {
+    if (path.length - 1 === n) { if (!res.has(node)) res.set(node, path.slice()); return; }
+    for (const nb of ADJ[node]) {
+      if (nb === prev && !allowBack) continue;
+      if (!canHub && NODES[nb].zone === 'hub' && NODES[node].zone !== 'hub') continue;
+      path.push(nb); dfs(nb, node, path, allowBack); path.pop();
+    }
+  };
+  dfs(from, -1, [from], false);
+  if (!res.size) dfs(from, -1, [from], true);
+  return res;
+}
+function shortestPath(a, b) {
+  const prev = new Array(N).fill(-1), q = [a], seen = new Set([a]);
+  while (q.length) { const x = q.shift(); if (x === b) break; for (const nb of ADJ[x]) if (!seen.has(nb)) { seen.add(nb); prev[nb] = x; q.push(nb); } }
+  const path = [b]; while (path[0] !== a) path.unshift(prev[path[0]]); return path;
 }
 function buildBoard(cats) {
-  const k = cats.length;
-  const cap = k <= 3 ? 4 : k <= 4 ? 3 : 2;
-  const catTotal = Math.max(k, Math.min(cap * k, 29 - 7 - k));
-  const per = cats.map((c, i) => Math.floor(catTotal / k) + (i < catTotal % k ? 1 : 0));
-  const nSpec = 29 - k - catTotal;
+  const k = cats.length, out = new Array(N).fill(null);
+  const ringFree = RING.filter(i => i !== 0); out[0] = { t: 'start' };
+  const catTotal = Math.min(ringFree.length - 9, 8 * k), per = cats.map((c, i) => Math.floor(catTotal / k) + (i < catTotal % k ? 1 : 0));
   const POOL = ['pair', 'mind', 'est', 'free', 'bluff', 'emoji', 'draw', 'surprise', 'blitz', 'luck'];
-  let specs = []; while (specs.length < nSpec) specs = specs.concat(shuffle(POOL)); specs = specs.slice(0, nSpec);
-  // Tresore grob verteilt, aber wild durchgemischt
-  const out = new Array(N).fill(null); out[0] = { t: 'start' };
-  shuffle(cats).forEach((c, i) => {
-    let p = Math.round(1 + (i + .5) * 29 / k) + rand(3) - 1, tries = 0;
-    const bad = q => q < 1 || q > 29 || out[q] || (out[q - 1] && out[q - 1].t === 'vault') || (q < 29 && out[q + 1] && out[q + 1].t === 'vault');
-    while (bad(p) && tries++ < 60) p = 1 + rand(29);
-    while (out[p]) p = p % 29 + 1;
-    out[p] = { t: 'vault', c };
-  });
-  const rest = cats.flatMap((c, i) => Array.from({ length: per[i] }, () => ({ t: 'cat', c }))).concat(specs.map(t => ({ t })));
+  const specs = n => { let a = []; while (a.length < n) a = a.concat(shuffle(POOL)); return a.slice(0, n).map(t => ({ t })); };
+  // Ring: Schlüsselfelder + Sonderfelder, gut gemischt
+  const ringItems = cats.flatMap((c, i) => Array.from({ length: per[i] }, () => ({ t: 'cat', c }))).concat(specs(ringFree.length - catTotal));
   const same = (a, b) => a && b && a.t === b.t && a.c === b.c;
   let best = null, bestBad = 1e9;
-  for (let tr = 0; tr < 60; tr++) {
-    const sh = shuffle(rest), tmp = out.slice(); let j = 0;
-    for (let i = 1; i < N; i++) if (!tmp[i]) tmp[i] = sh[j++];
-    let badN = 0; for (let i = 1; i < N; i++) if (same(tmp[i], tmp[(i + 1) % N])) badN++;
-    if (badN < bestBad) { bestBad = badN; best = tmp; } if (!badN) break;
+  for (let tr = 0; tr < 80; tr++) {
+    const sh = shuffle(ringItems); let bad = 0;
+    for (let i = 0; i < sh.length - 1; i++) if (same(sh[i], sh[i + 1])) bad++;
+    if (bad < bestBad) { bestBad = bad; best = sh; } if (!bad) break;
   }
-  return best;
+  ringFree.forEach((n, i) => out[n] = best[i]);
+  // Wege: Sonderfelder
+  specs(SPOKES.length).forEach((f, i) => out[SPOKES[i]] = f);
+  // Tresorraum: Tresore gleichmäßig verteilt, Rest Sonderfelder
+  const hubOrder = shuffle(cats), step = HUB.length / k, used = new Set();
+  hubOrder.forEach((c, i) => { let h = Math.floor(i * step) % HUB.length; while (used.has(h)) h = (h + 1) % HUB.length; used.add(h); out[HUB[h]] = { t: 'vault', c }; });
+  const hs = specs(HUB.length - k); HUB.forEach(n => { if (!out[n]) out[n] = hs.pop(); });
+  return out;
 }
 const HEADS = ['🦊', '🐼', '🐸', '🦄', '🐯', '🐙', '👽', '🤖', '🐻', '🐵', '🐶', '🐱', '🐷', '🐰', '🐨', '🦁', '🐔', '🐧', '🦉', '🐢',
   '😎', '🤓', '😜', '🥸', '🤠', '😈', '👻', '💀', '🤡', '👑', '🎃', '🌝', '🍑', '🍆', '🌶️', '🍕', '🍩', '🥑', '🦖', '🧠', '👸', '🤴', '🧜‍♀️', '🧛', '🥷', '🧙'];
@@ -117,8 +154,8 @@ const BOT_BLUFFS = ['Wegen einer alten Tradition aus Bayern', 'Das hat die NASA 
 const BOT_TEXTS = ['Beep boop, ich hab keine Ahnung 🤖', 'Ein Toaster mit Gefühlen', 'Error 404: Witz nicht gefunden', 'Socken. Immer Socken.', 'Das sag ich nur meinem Akku', 'Ein Pinguin namens Klaus', 'Mama Robo wäre stolz', 'Strg + Lachen'];
 const LUCK = [
   { id: 'plus', l: '+150 Punkte 🎁' }, { id: 'steal', l: 'Klau 100 Punkte 🦹' }, { id: 'swap', l: 'Platztausch 🔄' },
-  { id: 'vault', l: 'Teleport zum Tresor 🌀' }, { id: 'key', l: 'Gratis-Schlüssel 🔑' }, { id: 'again', l: 'Nochmal würfeln 🎲' },
-  { id: 'minus', l: 'Pech! −100 💩' }, { id: 'fwd', l: '3 Felder vor 🚀' },
+  { id: 'vault', l: 'Teleport in den Tresorraum 🌀' }, { id: 'key', l: 'Gratis-Schlüssel 🔑' }, { id: 'again', l: 'Nochmal würfeln 🎲' },
+  { id: 'minus', l: 'Pech! −100 💩' }, { id: 'key2', l: 'Doppel-Schlüssel 🔑🔑' },
 ];
 
 /* ---------------- Profil & Statistik ---------------- */
@@ -323,7 +360,7 @@ function newPlayer(prof, idx) {
 
 class HostGame {
   constructor(code) {
-    this.code = code; this.sid = 0; this.toastId = 0; this.waiters = []; this.decks = {};
+    this.code = code; this.sid = 0; this.toastId = 0; this.waiters = []; this.decks = store.get('kn_decks', {});
     this.answers = [null, null]; this.nexts = [false, false]; this.rolled = false; this.choice = null; this.runId = 0;
     const saved = store.get('kn_settings', null);
     const settings = Object.assign({ turns: 10, mode: 'all', custom: CAT_KEYS.slice(), relation: 'love' }, saved || {});
@@ -345,8 +382,11 @@ class HostGame {
   check() { for (const w of this.waiters.slice()) if (w.cond()) { clearTimeout(w.timer); this.waiters = this.waiters.filter(x => x !== w); w.res('ok'); } }
   both(arr) { return () => arr()[0] && (arr()[1] || !this.s.players[1].connected); }
   draw(key, arr) {
-    if (!this.decks[key] || !this.decks[key].length) this.decks[key] = shuffle(arr.map((_, i) => i));
-    return arr[this.decks[key].pop()];
+    const id = key + ':' + arr.length; // eigener Stapel je Fragenpool – erst wenn alle dran waren, wird neu gemischt
+    if (!this.decks[id] || !this.decks[id].length) this.decks[id] = shuffle(arr.map((_, i) => i));
+    const v = arr[this.decks[id].pop()];
+    store.set('kn_decks', this.decks);
+    return v;
   }
   mult() { return this.s.final ? 2 : 1; }
   // ---- Netz
@@ -430,27 +470,27 @@ class HostGame {
         if (runId !== this.runId) return;
       }
       const d = [1 + rand(6), 1 + rand(6)]; this.s.lastDice = d;
-      const pos = pl[p].pos, opts = [];
-      const addOpt = (steps, tag) => { for (const dir of [1, -1]) { const to = ((pos + dir * steps) % N + N) % N; if (!opts.some(o => o.to === to)) opts.push({ steps, dir, to, tag }); } };
+      const pos = pl[p].pos, opts = [], hubOK = canEnterVaults(pl[p]);
+      const addOpt = (steps, tag) => { for (const [to, path] of walks(pos, steps, hubOK)) if (!opts.some(o => o.to === to)) opts.push({ steps, to, path, tag }); };
       addOpt(d[0]); if (d[1] !== d[0]) addOpt(d[1]); else addOpt(d[0] * 2, 'pasch');
       this.setStage({ type: 'choose', p, dice: d, opts });
       await this.waitFor(() => this.choice != null, 45000);
       if (runId !== this.runId) return;
       const o = opts[this.choice ?? 0];
       if (o.tag === 'pasch') this.toast('🎲🎲 Pasch! Doppelt so weit!');
-      await this.moveBy(p, o.steps * o.dir);
+      await this.moveBy(p, o.path);
       await this.resolve(p, pl[p].pos);
       if (runId !== this.runId) return;
       if (!this.extraTurn) { this.s.turnNo++; this.s.turn = 1 - p; }
     }
     if (runId === this.runId) this.setStage({ type: 'end' });
   }
-  async moveBy(p, steps) {
-    const pl = this.s.players[p], from = pl.pos, to = ((from + steps) % N + N) % N, n = Math.abs(steps), dir = Math.sign(steps) || 1;
-    pl.pos = to; // Ziel sofort setzen – der Client animiert ab "from"
-    if (dir > 0 && from + n >= N && to !== 0) { pl.score += 100; this.toast(`🚀 ${pl.name} passiert den Start: +100`); }
-    else if (to === 0) { pl.score += 150; this.toast(`🚀 ${pl.name} landet genau auf Start: +150`); }
-    this.setStage({ type: 'move', p, from, to, steps: n, dir });
+  async moveBy(p, path) {
+    const pl = this.s.players[p], from = path[0], to = path[path.length - 1], n = path.length - 1;
+    pl.pos = to; // Ziel sofort setzen – der Client animiert entlang "path"
+    if (to === 0) { pl.score += 150; this.toast(`🚀 ${pl.name} landet genau auf Start: +150`); }
+    else if (path.slice(1, -1).includes(0)) { pl.score += 100; this.toast(`🚀 ${pl.name} passiert den Start: +100`); }
+    this.setStage({ type: 'move', p, from, to, steps: n, path });
     await sleep(200 + n * 300 + 450);
   }
   async intro(o, ms) { this.setStage(Object.assign({ type: 'intro' }, o)); await sleep(ms); }
@@ -475,10 +515,7 @@ class HostGame {
       case 'bluff': case 'emoji': case 'draw': await this.dual(t, p, idx); break;
       case 'start': this.push(); await sleep(900); break;
       case 'cat': {
-        const has = pl.keys[f.c] || pl.crowns[f.c];
-        await this.intro({ p, field: idx, cat: f.c, icon: has ? CATS[f.c].i : '🔑', title: has ? CATS[f.c].n : 'SCHLÜSSEL-FRAGE', sub: has ? 'Punkte-Duell – Schnelligkeit zählt!' : `${CATS[f.c].i} ${CATS[f.c].n}: Richtig = Schlüssel für ${pl.name}!` }, 2000);
-        const r = await this.ask(this.mcQ(f.c), { dur: 15, mover: p, keyFor: has ? null : p });
-        if (r.correct[p] && !pl.keys[f.c] && !pl.crowns[f.c]) { pl.keys[f.c] = true; this.setStage({ type: 'keyGot', p, cat: f.c }); await sleep(2200); }
+        await this.keyQuestion(p, f.c, idx);
         break;
       }
       case 'vault': await this.vault(p, f.c, idx); break;
@@ -602,8 +639,8 @@ class HostGame {
     const me = this.s.players[1];
     const val = o => {
       const f = this.s.fields[o.to];
-      if (f.t === 'vault') return me.crowns[f.c] ? 2 : me.keys[f.c] ? 10 : 3;
-      if (f.t === 'cat') return me.keys[f.c] || me.crowns[f.c] ? 3 : 7;
+      if (f.t === 'vault') return me.crowns[f.c] ? 2 : keyCount(me, f.c) >= KEYS_NEEDED ? 14 : 2;
+      if (f.t === 'cat') return keyCount(me, f.c) >= KEYS_NEEDED || me.crowns[f.c] ? 3 : 6 + keyCount(me, f.c);
       return f.t === 'start' ? 2 : 4;
     };
     let best = 0, bv = -1;
@@ -617,7 +654,7 @@ class HostGame {
     const pub = { kind: q.kind, text: q.text, self: q.self, options: q.options, unit: q.unit, subject: q.subject };
     const durs = [dur, dur], pl = this.s.players, gap = pl[0].score - pl[1].score;
     if (['mc', 'tf', 'est'].includes(q.kind) && Math.abs(gap) >= 300) durs[gap > 0 ? 0 : 1] = Math.max(3, Math.round(dur * .7));
-    const base = { cat: q.cat || null, ft: o.ft || null, title: o.title || null, n: o.n || null, of: o.of || null, mover: o.mover ?? null, mult, vault: o.vault || null, keyFor: o.keyFor ?? null, durs };
+    const base = { cat: q.cat || null, ft: o.ft || null, title: o.title || null, n: o.n || null, of: o.of || null, mover: o.mover ?? null, mult, vault: o.vault || null, keyFor: o.keyFor ?? null, keyNo: o.keyNo ?? null, durs };
     this.curQ = q;
     this.setStage(Object.assign({ type: 'q', q: pub, dur, answered: [false, false] }, base));
     await this.waitFor(this.both(() => this.answers), dur * 1000 + 1500);
@@ -669,6 +706,17 @@ class HostGame {
     pts.forEach((p, i) => { pl[i].score += p; });
     return { pts, correct, note, diffs, streak };
   }
+  async keyQuestion(p, cat, idx, intro) {
+    const pl = this.s.players[p], k = keyCount(pl, cat), full = k >= KEYS_NEEDED || pl.crowns[cat];
+    await this.intro({ p, field: idx, cat, icon: full ? CATS[cat].i : '🔑', title: full ? CATS[cat].n : 'SCHLÜSSEL-FRAGE', sub: intro || (full ? (pl.crowns[cat] ? 'Tresor schon geknackt – Punkte-Duell!' : 'Schlüsselbund ist voll – ab in den Tresorraum! Jetzt: Punkte-Duell.') : `${CATS[cat].i} ${CATS[cat].n}: Richtig = Schlüssel ${k + 1}/${KEYS_NEEDED} für ${pl.name}!`) }, 2100);
+    const r = await this.ask(this.mcQ(cat), { dur: 15, mover: p, keyFor: full ? null : p, keyNo: full ? null : k + 1 });
+    if (r.correct[p] && !full) this.giveKey(p, cat), await sleep(2400);
+  }
+  giveKey(p, cat) {
+    const pl = this.s.players[p], n = Math.min(KEYS_NEEDED, keyCount(pl, cat) + 1);
+    pl.keys[cat] = n;
+    this.setStage({ type: 'keyGot', p, cat, n });
+  }
   async vault(p, cat, idx) {
     const pl = this.s.players[p];
     if (pl.crowns[cat]) {
@@ -676,8 +724,10 @@ class HostGame {
       await this.ask(this.mcQ(cat), { dur: 15, mover: p, title: 'Bonusfrage' });
       return;
     }
-    const hasKey = !!pl.keys[cat], need = hasKey ? 2 : 3;
-    await this.intro({ p, field: idx, cat, vaultIntro: true, hasKey, icon: CATS[cat].i, title: 'TRESOR!', sub: `${pl.name} knackt „${CATS[cat].n}“. ${hasKey ? 'Mit 🔑 Schlüssel: 2 von 3 richtig!' : 'Ohne Schlüssel: alle 3 richtig!'}` }, 3200);
+    const k = keyCount(pl, cat);
+    if (k < KEYS_NEEDED) { await this.keyQuestion(p, cat, idx, `🔒 Verschlossen! ${pl.name} fehlen noch ${KEYS_NEEDED - k} Schlüssel für diesen Tresor. Trostpreis: eine Schlüssel-Frage!`); return; }
+    const hasKey = true, need = 2;
+    await this.intro({ p, field: idx, cat, vaultIntro: true, hasKey, icon: CATS[cat].i, title: 'TRESOR!', sub: `${pl.name} steckt alle ${KEYS_NEEDED} 🔑 ins Schloss von „${CATS[cat].n}“. 2 von 3 Fragen richtig = Krone!` }, 3400);
     let got = 0; const marks = [];
     for (let n = 1; n <= 3; n++) {
       const r = await this.ask(this.mcQ(cat), { dur: 14, mover: p, title: `Tresor ${n}/3`, n, of: 3, vault: { need, marks: marks.slice(), p }, revealMs: 4500 });
@@ -718,24 +768,22 @@ class HostGame {
       case 'swap': [me.pos, other.pos] = [other.pos, me.pos]; this.toast('🔄 Platztausch!'); break;
       case 'minus': me.score = Math.max(0, me.score - 100); this.toast(`💩 ${me.name} −100`); break;
       case 'again': this.extraTurn = true; this.toast(`🎲 ${me.name} darf nochmal!`); break;
-      case 'key': {
-        const free = this.s.cats.filter(c => !me.keys[c] && !me.crowns[c]);
-        if (free.length) { const c = free[rand(free.length)]; me.keys[c] = true; this.setStage({ type: 'keyGot', p, cat: c }); await sleep(2200); }
-        else { me.score += 150 * mult; this.toast(`🎁 Alle Schlüssel schon da – +${150 * mult}`); }
+      case 'key': case 'key2': {
+        const open = () => this.s.cats.filter(c => keyCount(me, c) < KEYS_NEEDED && !me.crowns[c]);
+        for (let n = 0; n < (ev === 'key2' ? 2 : 1); n++) {
+          const free = open();
+          if (free.length) { this.giveKey(p, free[rand(free.length)]); await sleep(2400); }
+          else { me.score += 150 * mult; this.toast(`🎁 Alle Schlüssel schon da – +${150 * mult}`); }
+        }
         break;
       }
       case 'vault': {
-        let k = 1; while (this.s.fields[(me.pos + k) % N].t !== 'vault') k++;
+        const ready = this.s.cats.filter(c => keyCount(me, c) >= KEYS_NEEDED && !me.crowns[c]);
+        if (!ready.length) { this.toast('🌀 Noch kein voller Schlüsselbund – dafür gibt\'s einen Schlüssel!'); this.push(); await sleep(900); const free = this.s.cats.filter(c => keyCount(me, c) < KEYS_NEEDED && !me.crowns[c]); if (free.length) { this.giveKey(p, free[rand(free.length)]); await sleep(2400); } break; }
+        const target = this.s.fields.findIndex(f => f && f.t === 'vault' && f.c === ready[rand(ready.length)]);
         this.push(); await sleep(400);
-        await this.moveBy(p, k);
+        await this.moveBy(p, shortestPath(me.pos, target));
         await this.resolve(p, me.pos); return;
-      }
-      case 'fwd': {
-        this.push(); await sleep(400);
-        await this.moveBy(p, 3);
-        if (this.s.fields[me.pos].t === 'luck') { me.score += 50; this.toast('Schon wieder Glück: +50'); this.push(); await sleep(1200); }
-        else await this.resolve(p, me.pos);
-        return;
       }
     }
     this.push(); await sleep(1300);
@@ -879,9 +927,9 @@ function showCreator(nameMissing) {
 function showRules() {
   openSheet(`<div class="rules">
     <div class="qhead"><span class="pill" style="--cc:var(--yellow)">❓ So geht's</span><div class="spacer"></div><button class="iconbtn" id="closeR">✕</button></div>
-    <h3>🎲🎲 Würfeln mit Taktik</h3><p>Du würfelst mit <b>zwei Würfeln</b> und suchst dir aus, welchen du nimmst – und ob du <b>vor- oder rückwärts</b> läufst. Bei einem Pasch darfst du auch die doppelte Strecke gehen. Die möglichen Ziele leuchten auf dem Brett.</p>
-    <h3>🔑 Schlüssel sammeln</h3><p>Landest du auf einem Kategorie-Feld, ist es eine <b>Schlüssel-Frage</b>: Antwortest du richtig, gehört dir der Schlüssel dieser Kategorie.</p>
-    <h3>🔐 Tresore knacken</h3><p>Hinter jedem Kategorie-Abschnitt wartet ein <b>Tresor</b> mit 3 Fragen. Mit Schlüssel reichen 2 richtige, ohne müssen alle 3 sitzen. Geknackt = 👑 Krone + 300 Punkte. Plane deinen Weg: erst Schlüssel holen, dann zum Tresor!</p>
+    <h3>🗺️ Das Brett</h3><p>Außen läuft ein großer Ring, über vier Wege geht's nach innen in den <b>Tresorraum</b>. Du würfelst mit <b>zwei Würfeln</b>, wählst einen davon und läufst genau so viele Felder – an Kreuzungen entscheidest du die Richtung. Alle möglichen Ziele leuchten auf.</p>
+    <h3>🔑 Schlüssel sammeln</h3><p>Auf den Kategorie-Feldern im Ring gibt's <b>Schlüssel-Fragen</b>: richtig = 1 Schlüssel dieser Kategorie. Pro Kategorie brauchst du <b>${KEYS_NEEDED} Schlüssel</b>.</p>
+    <h3>🏛️ Tresorraum</h3><p>Erst mit einem vollen Schlüsselbund (${KEYS_NEEDED}🔑) einer Kategorie darfst du in den Tresorraum. Dort knackst du den passenden Tresor: <b>2 von 3</b> Fragen richtig = 👑 Krone + 300 Punkte.</p>
     <h3>⚔️ Immer im Duell</h3><p>Bei jeder Frage antwortet ihr <b>beide gleichzeitig</b>. Richtig & schnell = bis zu 200 Punkte.</p>
     <h3>🎉 Sonderfelder</h3><p><b>⚡ Blitzrunde</b> (Wahr/Falsch) · <b>🎯 Schätz-Duell</b> · <b>💘 Wer würde eher?</b> · <b>🧠 Gedankenleser</b> (erst liest der eine die Gedanken des anderen, dann umgekehrt) · <b>🃏 Bluffmeister</b> (erfinde eine falsche Antwort und finde die echte) · <b>😜 Emoji-Übersetzer</b> · <b>✏️ Kritzel-Kopf</b> · <b>🤪 Quatsch-Runde</b> · <b>🎰 Glücksrad</b> · <b>❓ Überraschung</b>.</p>
     <h3>🔥 Serie, Handicap & Comeback</h3><p>3 Übereinstimmungen in Folge bei Pärchen-/Freundes-Fragen bringen Bonuspunkte. Wer deutlich führt, hat bei Wissensfragen weniger Zeit. Wer 400+ Punkte hinten liegt, kann eine <b>Comeback-Risikorunde</b> wagen.</p>
@@ -1057,9 +1105,11 @@ function buildBoardDOM(s) {
   C.boardSig = JSON.stringify(s.fields);
   board.innerHTML = s.fields.map((f, i) => {
     const [c, r] = gridPos(i), m = fieldMeta(f);
-    const cls = 'field ' + (f.t === 'vault' ? 'vault' : f.t === 'cat' ? 'catf' : f.t === 'start' ? 'start' : 'special');
+    const cls = 'field ' + (f.t === 'vault' ? 'vault' : f.t === 'cat' ? 'catf' : f.t === 'start' ? 'start' : 'special') + ' z-' + NODES[i].zone;
     return `<div class="${cls}" id="f${i}" data-i="${i}" style="grid-column:${c};grid-row:${r};--fc:${m.color};--d:${(i * 0.17).toFixed(2)}s"><span class="fi">${m.icon}</span>${f.t === 'vault' ? '<span class="lock">🔒</span><span class="owners"></span>' : ''}${f.t === 'cat' ? '<span class="kmark"></span>' : ''}</div>`;
-  }).join('') + `<div class="boardcenter"><div class="arena"></div><div class="centerlogo">KOPFNUSS</div><div class="dicepair"><div class="dicebox"><div class="dice" id="dice0">${diceFaces()}</div></div><div class="dicebox"><div class="dice" id="dice1">${diceFaces()}</div></div></div></div>`
+  }).join('') + `<div class="vaultroom"><div class="vr-glow"></div></div><div class="vrcore"><span>🏛️</span><b>TRESOR<br>RAUM</b><small>ab ${KEYS_NEEDED}🔑</small></div>
+    <div class="dicearea"><div class="arena"></div><div class="dicepair"><div class="dicebox"><div class="dice" id="dice0">${diceFaces()}</div></div><div class="dicebox"><div class="dice" id="dice1">${diceFaces()}</div></div></div></div>
+    <div class="logoarea"><div class="centerlogo">KOPF<br>NUSS</div></div>`
     + `<div class="token" id="tk0"><div class="tshadow"></div><div class="stand"><div class="hopper"></div></div></div><div class="token" id="tk1"><div class="tshadow"></div><div class="stand"><div class="hopper"></div></div></div>`;
   board.onclick = e => {
     const f = e.target.closest('.field.target'); if (!f || !C.s) return;
@@ -1089,7 +1139,7 @@ function sizeBoard() {
   const bw = $('#bw'), board = $('#board'); if (!bw || !board) return;
   const W = bw.clientWidth, H = bw.clientHeight;
   const cos = Math.cos(TILT * Math.PI / 180);
-  const cell = Math.max(24, Math.floor(Math.min((W - 26) / 7.5, (H - 34) / (10.5 * cos + .8))));
+  const cell = Math.max(22, Math.floor(Math.min((W - 24) / (COLS + .45), (H - 30) / (ROWS * cos + .8))));
   board.style.setProperty('--cell', cell + 'px');
   document.documentElement.style.setProperty('--cell', cell + 'px');
   placeTokens(true);
@@ -1121,7 +1171,7 @@ async function animateMove(st) {
   C.anim[p] = { cur: st.from };
   for (let k = 1; k <= st.steps; k++) {
     if (!C.anim[p] || !tk) return;
-    const pos = ((st.from + st.dir * k) % N + N) % N; C.anim[p].cur = pos;
+    const pos = st.path[k]; C.anim[p].cur = pos;
     const other = C.s.players[1 - p];
     const [x, y] = tokenXY(p, pos, k === st.steps ? other.pos : -1);
     tk.style.transform = `translate3d(${x}px,${y}px,2px)`;
@@ -1152,7 +1202,7 @@ function updateHud(s) {
   $('#round').innerHTML = `<small>Zug</small><b>${Math.min(s.turnNo + 1, s.totalTurns)}/${s.totalTurns}</b>${s.final ? '<span class="fin">x2</span>' : ''}`;
   // Schlüssel-Leiste
   const L = s.players[me], R = s.players[op];
-  const cell = (p, c) => p.crowns[c] ? '<span class="ks crown">👑</span>' : p.keys[c] ? '<span class="ks key">🔑</span>' : '<span class="ks none"></span>';
+  const cell = (p, c) => { const k = keyCount(p, c); return p.crowns[c] ? '<span class="ks crown">👑</span>' : k >= KEYS_NEEDED ? '<span class="ks key">🔑3</span>' : k ? `<span class="ks part">🔑${k}</span>` : '<span class="ks none"></span>'; };
   $('#keybar').style.setProperty('--k', s.cats.length);
   $('#keybar').innerHTML = `<span class="kh">${esc(L.head)}</span>${s.cats.map(c => cell(L, c)).join('')}`
     + `<span class="kh"></span>${s.cats.map(c => `<span class="kc" style="--cc:${CATS[c].c}" title="${esc(CATS[c].n)}">${CATS[c].i}</span>`).join('')}`
@@ -1163,10 +1213,13 @@ function updateHud(s) {
     if (f.t === 'vault') {
       el.querySelector('.owners').innerHTML = s.players.filter(p => p.crowns[f.c]).map(p => `<span style="--pc:${p.color}">${esc(p.head)}</span>`).join('');
       el.classList.toggle('cracked', !!L.crowns[f.c]);
-      el.classList.toggle('haskey', !!L.keys[f.c]);
+      el.classList.toggle('haskey', keyCount(L, f.c) >= KEYS_NEEDED && !L.crowns[f.c]);
     } else if (f.t === 'cat') {
-      el.classList.toggle('needkey', !L.keys[f.c] && !L.crowns[f.c]);
+      const k = keyCount(L, f.c), need = k < KEYS_NEEDED && !L.crowns[f.c];
+      el.classList.toggle('needkey', need);
+      const km = el.querySelector('.kmark'); if (km) km.textContent = need ? k + '/' + KEYS_NEEDED : '';
     }
+    if (NODES[i].zone === 'hub') el.classList.toggle('gated', !canEnterVaults(L) && L.pos !== i && NODES[L.pos] && NODES[L.pos].zone !== 'hub');
   });
 }
 function countUp(el, from, to) {
@@ -1199,11 +1252,12 @@ function clearTargets() { $$('.field.target').forEach(f => { f.classList.remove(
 function optLabel(o, s, me) {
   const f = s.fields[o.to], pl = s.players[me];
   let what;
-  if (f.t === 'vault') what = `🔐 ${CATS[f.c].s}-Tresor ${pl.crowns[f.c] ? '👑' : pl.keys[f.c] ? '<em>🔑 bereit!</em>' : '<em class="warn">ohne 🔑</em>'}`;
-  else if (f.t === 'cat') what = `${CATS[f.c].i} ${CATS[f.c].s} ${pl.keys[f.c] || pl.crowns[f.c] ? '' : '<em>🔑 holen</em>'}`;
+  const k = f.c ? keyCount(pl, f.c) : 0;
+  if (f.t === 'vault') what = `🔐 ${CATS[f.c].s}-Tresor ${pl.crowns[f.c] ? '👑' : k >= KEYS_NEEDED ? '<em>🔑🔑🔑 bereit!</em>' : `<em class="warn">${k}/${KEYS_NEEDED} 🔑</em>`}`;
+  else if (f.t === 'cat') what = `${CATS[f.c].i} ${CATS[f.c].s} ${k >= KEYS_NEEDED || pl.crowns[f.c] ? '' : `<em>🔑 ${k}/${KEYS_NEEDED} → ${k + 1}</em>`}`;
   else if (f.t === 'start') what = '🚀 Start';
   else what = `${FT[f.t].i} ${FT[f.t].n}`;
-  return `<span class="dir">${o.dir > 0 ? '▶' : '◀'} ${o.steps}</span><span class="what">${what}</span>`;
+  return `<span class="dir">🎲${o.steps}</span><span class="what">${what}</span>`;
 }
 function choose(i) {
   if (C.chose) return;
@@ -1241,7 +1295,7 @@ function enterStage(st, s) {
         st.opts.forEach(o => {
           const f = $('#f' + o.to); if (!f) return;
           f.classList.add('target');
-          f.insertAdjacentHTML('beforeend', `<span class="marker"><b>${o.dir > 0 ? '▶' : '◀'}${o.steps}</b></span>`);
+          f.insertAdjacentHTML('beforeend', `<span class="marker"><b>${o.steps}</b></span>`);
         });
         if (mine) {
           const ab = setAction(`<div class="tgrid">${st.opts.map((o, i) => `<button class="tbtn" data-i="${i}">${optLabel(o, C.s, C.me)}</button>`).join('')}</div>`);
@@ -1253,8 +1307,8 @@ function enterStage(st, s) {
     }
     case 'move':
       closeSheet();
-      setAction(`<div class="waitbar">${st.dir > 0 ? '🏃 Los geht\'s …' : '🔙 Rückwärts …'}</div>`);
-      setStatus(`${mine ? 'Du läufst' : nameOf(st.p) + ' läuft'} ${st.steps} ${st.steps === 1 ? 'Feld' : 'Felder'} ${st.dir > 0 ? 'vor' : 'zurück'}`);
+      setAction(`<div class="waitbar">🏃 Los geht's …</div>`);
+      setStatus(`${mine ? 'Du läufst' : nameOf(st.p) + ' läuft'} ${st.steps} ${st.steps === 1 ? 'Feld' : 'Felder'}`);
       animateMove(st);
       break;
     case 'intro': renderIntro(st); break;
@@ -1302,7 +1356,7 @@ function stagePill(st) {
   return '';
 }
 function headHTML(st) {
-  const key = st.keyFor != null ? `<span class="pill keypill">🔑 ${st.keyFor === C.me ? 'Dein Schlüssel!' : 'Schlüssel für ' + nameOf(st.keyFor)}</span>` : '';
+  const key = st.keyFor != null ? `<span class="pill keypill">🔑 ${st.keyNo || ''}/${KEYS_NEEDED} ${st.keyFor === C.me ? 'für dich' : 'für ' + nameOf(st.keyFor)}</span>` : '';
   const hc = st.durs && st.durs[0] !== st.durs[1] ? `<span class="pill dark" title="Der Führende hat weniger Zeit">⏱️ ${st.durs[C.me] < st.durs[1 - C.me] ? 'Handicap: du!' : 'Handicap: ' + nameOf(1 - C.me)}</span>` : '';
   return `<div class="qhead">${stagePill(st)}${key}${hc}<div class="spacer"></div>${st.mult > 1 ? '<span class="pill x2">🔥 x2</span>' : ''}${st.title ? `<span class="pill dark">${esc(st.title)}</span>` : ''}</div>`;
 }
@@ -1328,8 +1382,9 @@ function renderKeyGot(st, s) {
   const c = CATS[st.cat], mine = st.p === C.me;
   setAction(`<div class="waitbar">🔑 Schlüssel!</div>`);
   openSheet(`<div class="intro"><div class="bigkey">🔑</div><h2 style="--cc:var(--yellow)">SCHLÜSSEL!</h2>
-    <p>${mine ? 'Du hast' : nameOf(st.p) + ' hat'} den Schlüssel für <b>${c.i} ${esc(c.n)}</b>.<br>Jetzt reichen am Tresor 2 von 3 richtige!</p></div>`, '#ffd60a');
-  Sound.fanfare(); if (mine) burst(50); vibrate([30, 30, 80]);
+    <div class="keyrow">${Array.from({ length: KEYS_NEEDED }, (_, i) => `<span class="${i < st.n ? 'on' : ''}">🔑</span>`).join('')}</div>
+    <p>${mine ? 'Du hast' : nameOf(st.p) + ' hat'} jetzt <b>${st.n}/${KEYS_NEEDED}</b> Schlüssel für <b>${c.i} ${esc(c.n)}</b>.<br>${st.n >= KEYS_NEEDED ? '🏛️ Der Weg in den Tresorraum ist offen!' : `Noch ${KEYS_NEEDED - st.n} bis zum Tresorraum.`}</p></div>`, '#ffd60a');
+  st.n >= KEYS_NEEDED ? Sound.jackpot() : Sound.key(); if (mine) burst(st.n >= KEYS_NEEDED ? 120 : 50); vibrate([30, 30, 80]);
 }
 
 function myDur(st) { return st.durs ? st.durs[C.me] : st.dur; }
@@ -1516,7 +1571,7 @@ function renderVaultResult(st, s) {
     <div class="vault-door ${st.success ? 'open' : ''}" style="--cc:${c.c}"><b>${st.success ? '👑' : '🔒'}</b></div>
     <h2 style="--cc:${st.success ? 'var(--lime)' : 'var(--red)'}">${st.success ? 'GEKNACKT!' : 'BLEIBT ZU!'}</h2>
     <div class="pips">${[0, 1, 2].map(i => `<i class="${st.marks[i] === 1 ? 'ok' : st.marks[i] === 0 ? 'no' : ''}"></i>`).join('')}</div>
-    <p>${st.success ? `${esc(p.name)} holt sich die Krone „${esc(c.n)}“ und <b>+${st.bonus}</b> Punkte!` : `${esc(p.name)} hatte ${st.got} von ${st.need} nötigen richtigen Antworten.${p.keys[st.cat] ? ' Der Schlüssel bleibt erhalten 🔑' : ''}`}</p>
+    <p>${st.success ? `${esc(p.name)} holt sich die Krone „${esc(c.n)}“ und <b>+${st.bonus}</b> Punkte!` : `${esc(p.name)} hatte ${st.got} von ${st.need} nötigen richtigen Antworten.${p.keys[st.cat] ? ' Die Schlüssel bleiben erhalten – nächster Versuch! 🔑' : ''}`}</p>
     </div>${nextBtn()}`, c.c);
   if (st.success) { Sound.fanfare(); burst(mine ? 120 : 60); vibrate([50, 50, 50, 50, 200]); } else { Sound.sad(); vibrate(200); }
   wireNext(panel, st);
