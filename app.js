@@ -15,7 +15,6 @@ const fmtNum = n => (Math.round(n * 100) / 100).toLocaleString('de-DE');
 const vibrate = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
 const PARAMS = new URLSearchParams(location.search);
 const LOCAL = PARAMS.has('local');
-const PREFIX = 'kopfnuss-duell-v1-';
 const TILT = 34;
 
 /* ---------------- Daten ---------------- */
@@ -255,100 +254,147 @@ const Sound = {
 /* ---------------- Netzwerk ---------------- */
 function genCode() { const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; return Array.from({ length: 4 }, () => A[rand(A.length)]).join(''); }
 
+// Verbindung über zwei öffentliche MQTT-Server (WebSocket) parallel – funktioniert in jedem WLAN & Mobilfunknetz.
+const BROKERS = PARAMS.get('brokers') ? PARAMS.get('brokers').split(',').filter(Boolean) : ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+const PEER_PREFIX = 'kopfnuss-duell-v2-';
+const NO_PEER = PARAMS.has('nopeer');
+const TOPIC = code => 'kopfnuss/v2/' + code;
+class Relay {
+  constructor(code, role, onMsg, onLink) {
+    this.base = TOPIC(code); this.role = role; this.onMsg = onMsg; this.onLink = onLink || (() => {});
+    this.inT = this.base + (role === 'host' ? '/h' : '/g'); this.outT = this.base + (role === 'host' ? '/g' : '/h');
+    this.sid = Math.random().toString(36).slice(2, 10); this.n = 0; this.seen = new Map(); this.clients = []; this.code = code; this.peerConns = [];
+    if (!window.mqtt && !window.Peer) { setTimeout(() => this.onLink('nolib'), 0); return; }
+    this.initPeer();
+    if (window.mqtt) for (const url of BROKERS) {
+      let c;
+      try { c = mqtt.connect(url, { clientId: 'kn_' + this.sid + '_' + this.clients.length, clean: true, keepalive: 20, reconnectPeriod: 1500, connectTimeout: 8000, protocolVersion: 4 }); } catch (e) { continue; }
+      c.on('connect', () => { c.subscribe([this.inT, this.base + '/a'], { qos: 0 }); this.onLink('up'); });
+      c.on('message', (t, buf) => { let m; try { m = JSON.parse(new TextDecoder().decode(buf)); } catch (e) { return; } this.handle(m, t.endsWith('/a')); });
+      c.on('error', () => {}); c.on('offline', () => this.onLink('down'));
+      this.clients.push(c);
+    }
+  }
+  handle(m, alive) {
+    if (!m || m.s === this.sid) return;
+    if (m.i) { if (this.seen.has(m.i)) return; this.seen.set(m.i, 1); if (this.seen.size > 600) this.seen.delete(this.seen.keys().next().value); }
+    this.onMsg(alive ? { t: 'alive', at: m.at, s: m.s } : m.d, m);
+  }
+  // Kanal 3: direkte WebRTC-Verbindung über PeerJS (klappt oft im selben WLAN)
+  initPeer() {
+    if (!window.Peer || NO_PEER) return;
+    const id = PEER_PREFIX + this.code;
+    const wire = c => {
+      c.on('open', () => { this.peerConns = this.peerConns.filter(x => x.open || x === c); if (!this.peerConns.includes(c)) this.peerConns.push(c); this.onLink('up'); });
+      c.on('data', d => { let m = d; if (typeof d === 'string') { try { m = JSON.parse(d); } catch (e) { return; } } this.handle(m, false); });
+      c.on('close', () => { this.peerConns = this.peerConns.filter(x => x !== c); });
+      c.on('error', () => {});
+    };
+    try {
+      if (this.role === 'host') {
+        this.peer = new Peer(id, { debug: 0 });
+        this.peer.on('connection', wire);
+        this.peer.on('open', () => this.onLink('peer-up'));
+        this.peer.on('error', e => { if (e && e.type === 'unavailable-id') this.onLink('peer-taken'); });
+      } else {
+        this.peer = new Peer({ debug: 0 });
+        const tryConnect = () => { if (this.dead || this.peerConns.some(c => c.open)) return; try { wire(this.peer.connect(id, { reliable: true, serialization: 'json' })); } catch (e) {} };
+        this.peer.on('open', () => { this.onLink('peer-ready'); tryConnect(); this.peerIv = setInterval(tryConnect, 6000); });
+        this.peer.on('error', () => {});
+      }
+      this.peer.on('disconnected', () => setTimeout(() => { try { if (!this.dead && this.peer.disconnected) this.peer.reconnect(); } catch (e) {} }, 2000));
+    } catch (e) {}
+  }
+  connected() { return this.clients.some(c => c.connected) || this.peerConns.some(c => c.open); }
+  send(obj) {
+    const m = { s: this.sid, i: this.sid + ':' + (++this.n), d: obj }, msg = JSON.stringify(m);
+    for (const c of this.clients) if (c.connected) { try { c.publish(this.outT, msg, { qos: 0 }); } catch (e) {} }
+    for (const c of this.peerConns) if (c.open) { try { c.send(m); } catch (e) {} }
+  }
+  setAlive(on) { const msg = on ? JSON.stringify({ s: this.sid, at: Date.now() }) : ''; for (const c of this.clients) if (c.connected) { try { c.publish(this.base + '/a', msg, { qos: 1, retain: true }); } catch (e) {} } }
+  destroy() { this.dead = true; clearInterval(this.peerIv); for (const c of this.clients) { try { c.end(true); } catch (e) {} } this.clients = []; try { this.peer && this.peer.destroy(); } catch (e) {} }
+}
+
 class HostTransport {
-  constructor(code, h) { this.code = code; this.h = h; this.conn = null; LOCAL ? this.initLocal() : this.initPeer(); }
+  constructor(code, h) { this.code = code; this.h = h; LOCAL ? this.initLocal() : this.initRelay(); }
   initLocal() {
     this.bc = new BroadcastChannel('kn-' + this.code);
     this.bc.onmessage = e => { const d = e.data; if (d.to === 'host' && d.kind === 'msg') this.h.onMsg(d.msg); };
     setTimeout(() => this.h.onOpen(), 30);
   }
-  initPeer() {
-    if (!window.Peer) { setTimeout(() => this.h.onError('nolib'), 0); return; }
-    this.peer = new Peer(PREFIX + this.code, { debug: 0 });
-    this.peer.on('open', () => this.h.onOpen());
-    this.peer.on('error', e => { if (e && e.type === 'peer-unavailable') return; this.h.onError(e && e.type || 'error'); });
-    this.peer.on('disconnected', () => setTimeout(() => { try { if (!this.peer.destroyed && this.peer.disconnected) this.peer.reconnect(); } catch (e) {} }, 1500));
-    this.peer.on('connection', c => {
-      c.on('open', () => { if (this.conn && this.conn !== c) { try { this.conn.close(); } catch (e) {} } this.conn = c; this.lastSeen = Date.now(); });
-      c.on('data', d => {
-        if (c !== this.conn) return;
-        this.lastSeen = Date.now();
-        if (d && d.t === 'ping') { try { c.send({ t: 'pong' }); } catch (e) {} return; }
-        this.h.onMsg(d);
-      });
-      c.on('close', () => { if (c === this.conn) { this.conn = null; this.h.onLeave(); } });
-      c.on('error', () => {});
+  initRelay() {
+    this.opened = false; this.guestSeen = 0; this.guestGone = true;
+    this.r = new Relay(this.code, 'host', (d, raw) => {
+      if (d && d.t === 'alive') { // ist der Code schon von einem anderen aktiven Spiel belegt?
+        if (!this.opened && d.s && d.s !== this.r.sid && d.at && Date.now() - d.at < 6 * 3600e3) { clearTimeout(this.claimT); this.claimT = null; this.destroy(); this.h.onError('unavailable-id'); }
+        return;
+      }
+      this.guestSeen = Date.now();
+      if (this.guestGone && d && d.t !== 'hello') this.h.onMsg({ t: 'alive-guest' });
+      this.guestGone = false;
+      if (d && d.t === 'ping') { this.r.send({ t: 'pong' }); return; }
+      this.h.onMsg(d);
+    }, st => {
+      if (st === 'nolib') { this.h.onError('nolib'); return; }
+      if (st === 'peer-taken' && !this.opened) { clearTimeout(this.claimT); this.claimT = null; this.destroy(); this.h.onError('unavailable-id'); return; }
+      if (st === 'peer-up') st = 'up';
+      if (st === 'up' && !this.opened && !this.claimT) this.claimT = setTimeout(() => { this.claimT = null; if (this.destroyed) return; this.opened = true; this.r.setAlive(true); this.h.onOpen(); }, 900);
+      else if (st === 'up' && this.opened) this.r.setAlive(true);
     });
-    this.hb = setInterval(() => {
-      if (this.conn && Date.now() - this.lastSeen > 12000) { const c = this.conn; this.conn = null; try { c.close(); } catch (e) {} this.h.onLeave(); }
-    }, 3000);
+    this.hb = setInterval(() => { if (this.opened) this.r.setAlive(true); }, 60000);
+    this.watch = setInterval(() => { if (!this.guestGone && this.guestSeen && Date.now() - this.guestSeen > 12000) { this.guestGone = true; this.h.onLeave(); } }, 3000);
+    this.failT = setTimeout(() => { if (!this.opened && !this.destroyed) this.h.onError('network'); }, 15000);
   }
   send(msg) {
     if (LOCAL) { this.bc.postMessage({ to: 'guest', kind: 'msg', msg }); return; }
-    if (this.conn && this.conn.open) { try { this.conn.send(msg); } catch (e) {} }
+    this.r && this.r.send(msg);
   }
-  destroy() { this.destroyed = true; clearInterval(this.hb); try { this.bc && this.bc.close(); } catch (e) {} try { this.peer && this.peer.destroy(); } catch (e) {} }
+  destroy() {
+    if (this.destroyed) return; this.destroyed = true;
+    clearInterval(this.hb); clearInterval(this.watch); clearTimeout(this.failT); clearTimeout(this.claimT);
+    try { this.bc && this.bc.close(); } catch (e) {}
+    if (this.r) { try { if (this.opened) this.r.setAlive(false); } catch (e) {} const r = this.r; setTimeout(() => r.destroy(), 300); }
+  }
 }
 
 class GuestTransport {
-  constructor(code, h) { this.code = code; this.h = h; LOCAL ? this.initLocal() : this.initPeer(); }
+  constructor(code, h) { this.code = code; this.h = h; LOCAL ? this.initLocal() : this.initRelay(); }
   initLocal() {
     this.bc = new BroadcastChannel('kn-' + this.code);
     this.bc.onmessage = e => { const d = e.data; if (d.to === 'guest' && d.kind === 'msg') this.h.onMsg(d.msg); };
     setTimeout(() => { this.ever = true; this.h.onOpen(); }, 30);
   }
-  initPeer() {
-    if (!window.Peer) { setTimeout(() => this.h.onError('nolib'), 0); return; }
-    this.peer = new Peer({ debug: 0 });
-    this.peer.on('open', () => this.connect());
-    this.peer.on('error', e => {
-      const t = e && e.type;
-      if (t === 'peer-unavailable') { if (!this.ever) this.h.onError('notfound'); return; }
-      if (!this.ever) this.h.onError(t || 'error');
+  initRelay() {
+    this.hostAlive = false; this.lastPong = 0; this.linked = false;
+    this.r = new Relay(this.code, 'guest', d => {
+      if (!d) return;
+      if (d.t === 'alive') { if (d.at) this.hostAlive = true; return; }
+      this.lastPong = Date.now();
+      if (!this.ever) { this.ever = true; }
+      if (this.isLost) { this.isLost = false; this.h.onOpen(); }
+      if (d.t === 'pong') return;
+      this.h.onMsg(d);
+    }, st => {
+      if (st === 'nolib') { this.h.onError('nolib'); return; }
+      if (st === 'peer-ready') { this.linked = true; return; }
+      if (st === 'up' && !this.linked) { this.linked = true; this.h.onOpen(); }
+      else if (st === 'up' && this.linked && !this.ever) this.h.onOpen();
+      if (st === 'up' && this.ever && this.isLost) this.h.onOpen();
     });
-    this.peer.on('disconnected', () => setTimeout(() => { try { if (!this.peer.destroyed && this.peer.disconnected) this.peer.reconnect(); } catch (e) {} }, 1500));
+    this.hb = setInterval(() => {
+      if (!this.r.connected()) return;
+      this.r.send({ t: 'ping' });
+      if (this.ever && this.lastPong && Date.now() - this.lastPong > 10000 && !this.isLost) { this.isLost = true; this.h.onClose(); }
+    }, 3000);
+    this.nfT = setTimeout(() => { if (!this.ever && !this.hostAlive && !this.destroyed) this.h.onError(this.linked ? 'notfound' : 'network'); }, 10000);
   }
-  connect() {
-    if (this.destroyed) return;
-    const c = this.peer.connect(PREFIX + this.code, { reliable: true });
-    this.conn = c;
-    c.on('open', () => {
-      if (c !== this.conn) return;
-      this.ever = true; this.lastPong = Date.now();
-      clearTimeout(this.retryTimer); this.retryTimer = null;
-      clearInterval(this.hb);
-      this.hb = setInterval(() => {
-        if (c !== this.conn) return;
-        try { c.send({ t: 'ping' }); } catch (e) {}
-        if (Date.now() - this.lastPong > 12000) this.lost();
-      }, 3000);
-      this.h.onOpen();
-    });
-    c.on('data', d => { if (c !== this.conn) return; this.lastPong = Date.now(); if (d && d.t === 'pong') return; this.h.onMsg(d); });
-    c.on('close', () => { if (c === this.conn) this.lost(); });
-    c.on('error', () => {});
-  }
-  lost() {
-    if (this.destroyed || this.retryTimer) return;
-    clearInterval(this.hb);
-    try { this.conn && this.conn.close(); } catch (e) {}
-    this.conn = null;
-    this.h.onClose();
-    const attempt = () => {
-      if (this.destroyed) return;
-      if (this.conn && this.conn.open) { this.retryTimer = null; return; }
-      try { if (this.peer.disconnected) this.peer.reconnect(); } catch (e) {}
-      if (!this.peer.disconnected) this.connect();
-      this.retryTimer = setTimeout(attempt, 4000);
-    };
-    this.retryTimer = setTimeout(attempt, 800);
-  }
-  isOpen() { return LOCAL ? true : !!(this.conn && this.conn.open); }
+  lost() { if (!this.isLost && this.ever) { this.isLost = true; this.h.onClose(); } }
+  isOpen() { return LOCAL ? true : !!(this.r && this.r.connected() && !this.isLost); }
   send(msg) {
     if (LOCAL) { this.bc.postMessage({ to: 'host', kind: 'msg', msg }); return; }
-    if (this.conn && this.conn.open) { try { this.conn.send(msg); } catch (e) {} }
+    this.r && this.r.send(msg);
   }
-  destroy() { this.destroyed = true; clearInterval(this.hb); clearTimeout(this.retryTimer); try { this.bc && this.bc.close(); } catch (e) {} try { this.peer && this.peer.destroy(); } catch (e) {} }
+  destroy() { this.destroyed = true; clearInterval(this.hb); clearTimeout(this.nfT); try { this.bc && this.bc.close(); } catch (e) {} const r = this.r; if (r) setTimeout(() => r.destroy(), 300); }
 }
 
 /* ---------------- Host-Spiellogik ---------------- */
@@ -369,7 +415,7 @@ class HostGame {
     this.s = { phase: 'lobby', code, players: [newPlayer(P, 0)], settings, cats, fields: buildBoard(cats), turn: 0, turnNo: 0, totalTurns: 20, final: false, lastDice: [3, 5], stage: { id: 0, type: 'lobby' }, toast: null, online: false, gameId: '' };
   }
   attach(transport) { this.t = transport; }
-  push() { const s = JSON.parse(JSON.stringify(this.s)); s.stage.elapsed = Date.now() - (this.stageT0 || Date.now()); this.t && this.t.send({ t: 'state', s }); onState(s); }
+  push() { this.s.rev = (this.s.rev || 0) + 1; const s = JSON.parse(JSON.stringify(this.s)); s.stage.elapsed = Date.now() - (this.stageT0 || Date.now()); this.t && this.t.send({ t: 'state', s }); onState(s); }
   setStage(st) { this.s.stage = Object.assign({}, st, { id: ++this.sid }); this.stageT0 = Date.now(); this.answers = [null, null]; this.nexts = [false, false]; this.rolled = false; this.choice = null; this.cbReq = false; this.push(); if (this.bot) this.botAct(this.s.stage); }
   toast(text) { this.s.toast = { id: ++this.toastId, text }; }
   waitFor(cond, ms) {
@@ -405,6 +451,8 @@ class HostGame {
       } else { this.t.send({ t: 'full' }); return; }
       this.t.send({ t: 'welcome', you: 1 });
       this.push(); this.check();
+    } else if (m.t === 'alive-guest') {
+      const g = this.s.players[1]; if (g && !g.connected) { g.connected = true; this.toast(`${g.name} ist wieder da!`); this.push(); this.check(); }
     } else if (m.t === 'act') this.onAction(1, m.a || {});
     else if (m.t === 'leave') this.onLeave();
   }
@@ -958,7 +1006,7 @@ function startHost(code) {
     onError: type => {
       if (type === 'unavailable-id') { t.destroy(); C.host = null; startHost(); return; }
       if (type === 'nolib') { errorScreen('Die Verbindungs-Bibliothek konnte nicht geladen werden. Bist du online?'); return; }
-      if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(type)) { banner('Verbindung zum Server wackelt …'); setTimeout(() => banner(''), 4000); return; }
+      if (type === 'network') { if (!g.s.online) { t.destroy(); errorScreen('Keine Verbindung zum Spiele-Server. Bist du online (WLAN oder mobile Daten)? Probier es gleich nochmal.'); } return; }
       console.warn('Peer-Fehler', type);
     },
     onMsg: m => g.onMsg(m),
@@ -997,20 +1045,26 @@ function showJoin(prefill) {
 
 function joinGame(code, onFail) {
   C.isHost = false; C.me = 1;
-  let welcomed = false;
-  const failT = setTimeout(() => { if (!welcomed) { t.destroy(); C.net = null; onFail('Keine Verbindung möglich. Code richtig? Seid ihr beide online?'); } }, 15000);
+  let welcomed = false; C.rev = 0;
+  const welcomedNow = () => welcomed;
+  const failT = setTimeout(() => { if (!welcomed) { t.destroy(); C.net = null; onFail('Keine Antwort vom Spiel. Code richtig? Ist das andere Handy noch in der Lobby?'); } }, 15000);
   const t = new GuestTransport(code, {
-    onOpen: () => { banner(''); t.send({ t: 'hello', profile: { name: P.name, head: P.head, body: P.body, color: P.color, hat: P.hat, glasses: P.glasses, aura: P.aura, pid: P.pid } }); },
+    onOpen: () => {
+      banner('');
+      const hello = () => t.send({ t: 'hello', profile: { name: P.name, head: P.head, body: P.body, color: P.color, hat: P.hat, glasses: P.glasses, aura: P.aura, pid: P.pid } });
+      hello(); clearInterval(t.helloIv); let n = 0;
+      t.helloIv = setInterval(() => { if (welcomedNow() || ++n > 8 || t.destroyed) { clearInterval(t.helloIv); return; } hello(); }, 1500);
+    },
     onMsg: m => {
       if (m.t === 'welcome') { welcomed = true; clearTimeout(failT); C.me = m.you; }
-      else if (m.t === 'state') { if (welcomed) onState(m.s); }
+      else if (m.t === 'state') { if (welcomed && !(C.rev && m.s.rev && m.s.rev < C.rev && m.s.rev > C.rev - 1e6 && m.s.code === (C.s && C.s.code))) { C.rev = m.s.rev; onState(m.s); } }
       else if (m.t === 'full') { clearTimeout(failT); t.destroy(); C.net = null; onFail('Dieses Spiel ist schon voll.'); }
     },
     onClose: () => { if (welcomed) banner('📡 Verbindung weg – verbinde neu …'); },
     onError: type => {
       if (welcomed) return;
       clearTimeout(failT); t.destroy(); C.net = null;
-      onFail(type === 'notfound' ? 'Code nicht gefunden 🤔' : type === 'nolib' ? 'Verbindungs-Bibliothek fehlt – bist du online?' : 'Verbindung fehlgeschlagen (' + type + ')');
+      onFail(type === 'notfound' ? 'Code nicht gefunden 🤔 – ist das Spiel auf dem anderen Handy noch offen?' : type === 'nolib' ? 'Verbindungs-Bibliothek fehlt – bist du online?' : 'Keine Verbindung zum Spiele-Server. Bist du online (WLAN oder mobile Daten)?');
     },
   });
   C.net = t;

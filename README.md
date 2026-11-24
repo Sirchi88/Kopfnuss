@@ -60,6 +60,6 @@ Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in de
 
 ## Technik
 - Reines HTML/CSS/JS ohne Build-Schritt. Die Fragen stehen in `questions*.js` (über 1.700 Stück) und lassen sich leicht erweitern.
-- Die Handys verbinden sich direkt per WebRTC über [PeerJS](https://peerjs.com) (`peerjs.min.js`, MIT-Lizenz). Der Code dient nur als Treffpunkt.
+- **Verbindung (dreifach abgesichert):** Die Handys verbinden sich gleichzeitig über zwei öffentliche MQTT-Nachrichten-Server (EMQX & HiveMQ, per WebSocket) und direkt per WebRTC ([PeerJS](https://peerjs.com)). Es reicht, wenn einer dieser Wege durchkommt. Doppelte Nachrichten werden aussortiert. Bibliotheken: `mqtt.min.js` und `peerjs.min.js` (beide MIT-Lizenz).
 - Das Handy des Hosts steuert das Spiel, das andere zeigt nur den Zustand an.
 - Testmodus am PC: `index.html?local` in zwei Tabs öffnen. Die Verbindung läuft dann über den Browser statt übers Internet.
