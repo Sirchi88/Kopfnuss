@@ -7,7 +7,7 @@ Zwei Handys, ein Code, los geht's. Kein Server, keine Anmeldung.
 1. Beide öffnen die App-Adresse (siehe unten) am Handy und tragen Name, Avatar und Farbe ein.
 2. Einer tippt auf **Spiel erstellen**. Es erscheint ein 4-stelliger Code.
 3. Der andere tippt auf **Mit Code beitreten** und gibt den Code ein.
-4. Der Host wählt die Spiellänge (Quickie / Normal / Marathon) und startet.
+4. Der Host wählt Kategorien, Spiellänge (6 bis 50 Runden) und Siegmodus und startet das Spiel.
 
 **Allein reinschnuppern:** Mit „🤖 Übungsspiel gegen den Computer“ spielst du gegen Robo. Übungsspiele zählen nicht in die Statistik.
 
@@ -29,6 +29,9 @@ Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in de
   - 🤪 **Quatsch-Runde:** Freie Antwort, der andere bewertet
   - 🎰 **Glücksrad**
 - **Finale:** Die letzte Runde zählt doppelt.
+- **Siegmodus:**
+  - 🏆 **Punkte-Sieg:** Nach allen Runden gewinnt, wer die meisten Punkte hat.
+  - 🔐 **Tresor-Rennen:** Wer zuerst 3 Tresorfragen richtig beantwortet, gewinnt sofort.
 - **Neue Modi:**
   - 🧠 **Gedankenleser:** 2 Runden, die Rollen werden getauscht
   - 🃏 **Bluffmeister**
@@ -59,7 +62,7 @@ Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in de
 > Oder ihr zieht den Ordner per Drag & Drop auf https://app.netlify.com/drop.
 
 ## Technik
-- Reines HTML/CSS/JS ohne Build-Schritt. Die Fragen stehen in `questions*.js` (über 1.700 Stück) und lassen sich leicht erweitern.
+- Reines HTML/CSS/JS ohne Build-Schritt. Die Fragen stehen in `questions*.js` (fast 2.000 Stück) und lassen sich leicht erweitern.
 - **Verbindung (dreifach abgesichert):** Die Handys verbinden sich gleichzeitig über zwei öffentliche MQTT-Nachrichten-Server (EMQX & HiveMQ, per WebSocket) und direkt per WebRTC ([PeerJS](https://peerjs.com)). Es reicht, wenn einer dieser Wege durchkommt. Doppelte Nachrichten werden aussortiert. Bibliotheken: `mqtt.min.js` und `peerjs.min.js` (beide MIT-Lizenz).
 - Das Handy des Hosts steuert das Spiel, das andere zeigt nur den Zustand an.
 - Testmodus am PC: `index.html?local` in zwei Tabs öffnen. Die Verbindung läuft dann über den Browser statt übers Internet.

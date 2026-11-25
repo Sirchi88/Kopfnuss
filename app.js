@@ -57,7 +57,8 @@ const FT = {
   luck:  { i: '🎰', n: 'Glücksrad', c: '#ffd60a', sub: 'Alles kann passieren …' },
 };
 // Brett: äußerer Ring (Schlüssel sammeln) + 4 Wege nach innen + Tresorraum (Ring) in der Mitte
-const COLS = 9, ROWS = 11, KEYS_NEEDED = 3;
+const COLS = 9, ROWS = 11, KEYS_NEEDED = 3, VAULT_GOAL = 3;
+const winnerOf = s => s.winner != null ? s.winner : s.players[0].score === s.players[1].score ? -1 : s.players[0].score > s.players[1].score ? 0 : 1;
 const NODES = [], ADJ = [];
 (() => {
   const add = (c, r, zone) => { NODES.push({ c, r, zone }); ADJ.push([]); return NODES.length - 1; };
@@ -180,7 +181,7 @@ function recordGame(s, me) {
   const st = loadStats();
   if (st.done.includes(s.gameId)) return;
   const pl = s.players[me], op = s.players[1 - me];
-  const res = pl.score > op.score ? 'w' : pl.score < op.score ? 'l' : 'd';
+  const W = winnerOf(s), res = W === me ? 'w' : W === -1 ? 'd' : 'l';
   st.done = st.done.concat(s.gameId).slice(-30);
   st.games++; st[res === 'w' ? 'wins' : res === 'l' ? 'losses' : 'draws']++;
   st.points += pl.score; st.best = Math.max(st.best, pl.score);
@@ -409,7 +410,7 @@ class HostGame {
     this.code = code; this.sid = 0; this.toastId = 0; this.waiters = []; this.decks = store.get('kn_decks', {});
     this.answers = [null, null]; this.nexts = [false, false]; this.rolled = false; this.choice = null; this.runId = 0;
     const saved = store.get('kn_settings', null);
-    const settings = Object.assign({ turns: 10, mode: 'all', custom: CAT_KEYS.slice(), relation: 'love' }, saved || {});
+    const settings = Object.assign({ turns: 10, mode: 'all', custom: CAT_KEYS.slice(), relation: 'love', win: 'points' }, saved || {});
     this.cbCool = [0, 0];
     const cats = resolveCats(settings);
     this.s = { phase: 'lobby', code, players: [newPlayer(P, 0)], settings, cats, fields: buildBoard(cats), turn: 0, turnNo: 0, totalTurns: 20, final: false, lastDice: [3, 5], stage: { id: 0, type: 'lobby' }, toast: null, online: false, gameId: '' };
@@ -490,7 +491,8 @@ class HostGame {
   // ---- Ablauf
   start() {
     this.runId++; this.waiters.forEach(w => clearTimeout(w.timer)); this.waiters = [];
-    for (const p of this.s.players) Object.assign(p, { pos: 0, score: 0, keys: {}, crowns: {}, stats: freshStats() });
+    for (const p of this.s.players) Object.assign(p, { pos: 0, score: 0, keys: {}, crowns: {}, vr: 0, stats: freshStats() });
+    this.s.winner = null; this.s.winBy = null;
     this.s.cats = resolveCats(this.s.settings);
     this.pools = buildPools(this.s.settings.relation); this.cbCool = [0, 0];
     Object.assign(this.s, { phase: 'game', streak: 0, fields: buildBoard(this.s.cats), turn: rand(2), turnNo: 0, totalTurns: this.s.settings.turns * 2, final: false, gameId: Date.now().toString(36) + rand(1e6) });
@@ -499,7 +501,7 @@ class HostGame {
   async run(runId) {
     while (runId === this.runId) {
       const pl = this.s.players;
-      if (this.s.turnNo >= this.s.totalTurns || pl.some(p => Object.keys(p.crowns).length === this.s.cats.length)) break;
+      if (this.s.winner != null || this.s.turnNo >= this.s.totalTurns || pl.some(p => Object.keys(p.crowns).length === this.s.cats.length)) break;
       const wasFinal = this.s.final;
       this.s.final = this.s.turnNo >= this.s.totalTurns - 2;
       if (this.s.final && !wasFinal) this.toast('🔥 FINALE! Ab jetzt doppelte Punkte!');
@@ -529,6 +531,7 @@ class HostGame {
       await this.moveBy(p, o.path);
       await this.resolve(p, pl[p].pos);
       if (runId !== this.runId) return;
+      if (this.s.winner != null) break;
       if (!this.extraTurn) { this.s.turnNo++; this.s.turn = 1 - p; }
     }
     if (runId === this.runId) this.setStage({ type: 'end' });
@@ -780,6 +783,12 @@ class HostGame {
     for (let n = 1; n <= 3; n++) {
       const r = await this.ask(this.mcQ(cat), { dur: 14, mover: p, title: `Tresor ${n}/3`, n, of: 3, vault: { need, marks: marks.slice(), p }, revealMs: 4500 });
       marks.push(r.correct[p] ? 1 : 0); if (r.correct[p]) got++;
+      if (r.correct[p]) pl.vr = (pl.vr || 0) + 1;
+      if (this.s.settings.win === 'vault' && pl.vr >= VAULT_GOAL) {
+        this.s.winner = p; this.s.winBy = 'vault';
+        this.toast(`🔐 ${pl.name} hat ${VAULT_GOAL} Tresorfragen richtig – SIEG!`);
+        break;
+      }
       if (got >= need || (3 - n) < (need - got)) break;
     }
     const success = got >= need, bonus = 300 * this.mult();
@@ -981,7 +990,7 @@ function showRules() {
     <h3>⚔️ Immer im Duell</h3><p>Bei jeder Frage antwortet ihr <b>beide gleichzeitig</b>. Richtig & schnell = bis zu 200 Punkte.</p>
     <h3>🎉 Sonderfelder</h3><p><b>⚡ Blitzrunde</b> (Wahr/Falsch) · <b>🎯 Schätz-Duell</b> · <b>💘 Wer würde eher?</b> · <b>🧠 Gedankenleser</b> (erst liest der eine die Gedanken des anderen, dann umgekehrt) · <b>🃏 Bluffmeister</b> (erfinde eine falsche Antwort und finde die echte) · <b>😜 Emoji-Übersetzer</b> · <b>✏️ Kritzel-Kopf</b> · <b>🤪 Quatsch-Runde</b> · <b>🎰 Glücksrad</b> · <b>❓ Überraschung</b>.</p>
     <h3>🔥 Serie, Handicap & Comeback</h3><p>3 Übereinstimmungen in Folge bei Pärchen-/Freundes-Fragen bringen Bonuspunkte. Wer deutlich führt, hat bei Wissensfragen weniger Zeit. Wer 400+ Punkte hinten liegt, kann eine <b>Comeback-Risikorunde</b> wagen.</p>
-    <h3>🏆 Sieg</h3><p>Nach der gewählten Anzahl Züge gewinnt, wer die meisten Punkte hat. Die letzte Runde zählt doppelt! Wer alle Kronen holt, gewinnt sofort.</p>
+    <h3>🏆 Sieg</h3><p><b>Punkte-Sieg:</b> Nach der gewählten Rundenzahl (6 bis 50) gewinnt, wer die meisten Punkte hat. <b>Tresor-Rennen:</b> Wer zuerst ${VAULT_GOAL} Tresorfragen richtig beantwortet, gewinnt sofort. Nach der gewählten Anzahl Züge gewinnt, wer die meisten Punkte hat. Die letzte Runde zählt doppelt! Wer alle Kronen holt, gewinnt sofort.</p>
     <button class="btn" id="okR" style="margin-top:16px">Alles klar!</button></div>`, '#ffd60a');
   $('#closeR').onclick = $('#okR').onclick = () => { Sound.click(); closeSheet(); };
 }
@@ -1106,7 +1115,9 @@ function renderLobby(s) {
       <div class="chips">${chips}</div>
       ${catsOk ? '' : '<div class="center" style="color:var(--pink);font-weight:900">Mindestens 3 Kategorien wählen!</div>'}
       <div class="label">Spiellänge</div>
-      <div class="seg">${[[6, 'Quickie', '~10 Min'], [10, 'Normal', '~20 Min'], [15, 'Marathon', '~30 Min']].map(([v, n, d]) => `<button data-t="${v}" class="${st.turns === v ? 'sel' : ''}" ${isHost ? '' : 'disabled'}>${n}<small>${v} Züge · ${d}</small></button>`).join('')}</div>
+      <div class="seg">${[[6, 'Quickie', '~10 Min'], [10, 'Normal', '~20 Min'], [15, 'Lang', '~30 Min'], [25, 'Marathon', '~50 Min'], [50, 'Mega', '~1,5 Std']].map(([v, n, d]) => `<button data-t="${v}" class="${st.turns === v ? 'sel' : ''}" ${isHost ? '' : 'disabled'}>${n}<small>${v} Runden · ${d}</small></button>`).join('')}</div>
+      <div class="label">Wer gewinnt?</div>
+      <div class="seg two">${[['points', '🏆 Punkte-Sieg', 'Meiste Punkte nach allen Runden'], ['vault', '🔐 Tresor-Rennen', `Wer zuerst ${VAULT_GOAL} Tresorfragen richtig hat, gewinnt sofort`]].map(([k, n, d]) => `<button data-win="${k}" class="${(st.win || 'points') === k ? 'sel' : ''}" ${isHost ? '' : 'disabled'}>${n}<small>${d}</small></button>`).join('')}</div>
     </div>
     <div class="spacer" style="min-height:14px"></div>
     ${isHost ? `<button class="btn ${ready && catsOk ? 'pink' : ''}" id="start" ${ready && catsOk ? '' : 'disabled'}>${ready ? '🚀 Los geht\'s!' : 'Warte auf Mitspieler …'}</button>`
@@ -1123,6 +1134,7 @@ function renderLobby(s) {
     $$('[data-t]', el).forEach(b => b.onclick = () => { Sound.click(); act({ type: 'settings', patch: { turns: +b.dataset.t } }); });
     $$('[data-mode]', el).forEach(b => b.onclick = () => { Sound.click(); act({ type: 'settings', patch: { mode: b.dataset.mode } }); });
     $$('[data-rel]', el).forEach(b => b.onclick = () => { Sound.click(); act({ type: 'settings', patch: { relation: b.dataset.rel } }); });
+    $$('[data-win]', el).forEach(b => b.onclick = () => { Sound.click(); act({ type: 'settings', patch: { win: b.dataset.win } }); });
     $$('.chip', el).forEach(b => b.onclick = () => {
       Sound.click(); const c = b.dataset.cat, cur = st.custom.slice();
       act({ type: 'settings', patch: { custom: cur.includes(c) ? cur.filter(x => x !== c) : cur.concat(c) } });
@@ -1241,7 +1253,8 @@ async function animateMove(st) {
 
 function pcardHTML(pl, i) {
   const crowns = Object.keys(pl.crowns).length;
-  return `<div class="pa">${esc(pl.head)}</div><div style="min-width:0"><div class="pn">${esc(pl.name)}${i === C.me ? ' (du)' : ''}</div><div class="ps" data-score="${pl.score}">${pl.score}</div><div class="crowns">${crowns ? '👑'.repeat(crowns) : ''}</div></div>${pl.connected ? '' : '<span class="off">offline</span>'}`;
+  const race = C.s && C.s.settings && C.s.settings.win === 'vault' ? `<span class="vr">🔐${pl.vr || 0}/${VAULT_GOAL}</span> ` : '';
+  return `<div class="pa">${esc(pl.head)}</div><div style="min-width:0"><div class="pn">${esc(pl.name)}${i === C.me ? ' (du)' : ''}</div><div class="ps" data-score="${pl.score}">${pl.score}</div><div class="crowns">${race}${crowns ? '👑'.repeat(crowns) : ''}</div></div>${pl.connected ? '' : '<span class="off">offline</span>'}`;
 }
 function updateHud(s) {
   const me = C.me, op = 1 - me;
@@ -1253,7 +1266,7 @@ function updateHud(s) {
     el.classList.toggle('active', s.turn === i && s.stage.type !== 'end');
     if (pl.score !== oldScore) countUp(el.querySelector('.ps'), oldScore, pl.score);
   });
-  $('#round').innerHTML = `<small>Zug</small><b>${Math.min(s.turnNo + 1, s.totalTurns)}/${s.totalTurns}</b>${s.final ? '<span class="fin">x2</span>' : ''}`;
+  $('#round').innerHTML = `<small>Runde</small><b>${Math.min(Math.floor(s.turnNo / 2) + 1, s.totalTurns / 2)}/${s.totalTurns / 2}</b>${s.final ? '<span class="fin">x2</span>' : ''}`;
   // Schlüssel-Leiste
   const L = s.players[me], R = s.players[op];
   const cell = (p, c) => { const k = keyCount(p, c); return p.crowns[c] ? '<span class="ks crown">👑</span>' : k >= KEYS_NEEDED ? '<span class="ks key">🔑3</span>' : k ? `<span class="ks part">🔑${k}</span>` : '<span class="ks none"></span>'; };
@@ -1735,9 +1748,9 @@ function verdictLine(w, l, diff) {
   return [`${W} GEWINNT HAUCHDÜNN GEGEN ${L}!`, 'Ein Krimi bis zur letzten Sekunde! 😱'];
 }
 function showFinale(s, after) {
-  const pl = s.players, tie = pl[0].score === pl[1].score, win = pl[0].score >= pl[1].score ? 0 : 1, lose = 1 - win;
+  const pl = s.players, W = winnerOf(s), tie = W === -1, win = tie ? 0 : W, lose = 1 - win;
   const max = Math.max(1, pl[0].score, pl[1].score);
-  const [head, sub] = tie ? ['UNENTSCHIEDEN!', 'Ihr seid einfach ein perfektes Team 💞'] : verdictLine(pl[win].name, pl[lose].name, pl[win].score - pl[lose].score);
+  const [head, sub] = tie ? ['UNENTSCHIEDEN!', 'Ihr seid einfach ein perfektes Team 💞'] : s.winBy === 'vault' ? [`${pl[win].name.toUpperCase()} GEWINNT DAS TRESOR-RENNEN!`, `${VAULT_GOAL} Tresorfragen richtig – ${pl[lose].name} schaut in die leere Schatzkammer. 🔐`] : verdictLine(pl[win].name, pl[lose].name, pl[win].score - pl[lose].score);
   const el = document.createElement('div'); el.id = 'finale';
   el.innerHTML = `<div class="fin-rays"></div><div class="fin-title">Und der Sieg geht an …</div>
     <div class="fin-race">${[C.me, 1 - C.me].map(i => `<div class="lane" style="--pc:${pl[i].color}"><div class="lfig">${figureHTML(pl[i], 'idle')}</div><div class="lbar"><i data-w="${Math.round(pl[i].score / max * 100)}"></i><b class="lsc" data-to="${pl[i].score}">0</b></div></div>`).join('')}</div>
@@ -1757,7 +1770,7 @@ function showFinale(s, after) {
 function trackUnlocks(s) {
   const u = unlockState(); if (u.done.includes(s.gameId)) return;
   const before = Object.values(ACC).flat().filter(isUnlocked).map(i => i.v);
-  u.g++; if (s.players[C.me].score > s.players[1 - C.me].score) u.w++;
+  u.g++; if (winnerOf(s) === C.me) u.w++;
   u.done = u.done.concat(s.gameId).slice(-30); store.set('kn_unlock', u);
   const neu = Object.values(ACC).flat().filter(isUnlocked).map(i => i.v).filter(v => !before.includes(v));
   if (neu.length) setTimeout(() => { toast(`🎁 Neu freigeschaltet: ${neu.join(' ')} – ab in den Figuren-Baukasten!`); Sound.key(); }, 4200);
@@ -1769,8 +1782,7 @@ function renderEnd(s) {
   showFinale(s, () => { if (C.s && C.s.stage.type === 'end') renderEndDetails(s); });
 }
 function renderEndDetails(s) {
-  const pl = s.players, order = [0, 1].sort((a, b) => pl[b].score - pl[a].score);
-  const tie = pl[0].score === pl[1].score, win = order[0];
+  const pl = s.players, W = winnerOf(s), tie = W === -1, win = tie ? 0 : W, order = [win, 1 - win];
   const avg = p => p.stats.right ? p.stats.ms / p.stats.right : Infinity;
   const awards = [];
   const best = (fn, hi = true) => { const a = fn(pl[0]), b = fn(pl[1]); if (a === b) return null; return (hi ? a > b : a < b) ? 0 : 1; };
@@ -1779,7 +1791,7 @@ function renderEndDetails(s) {
   if ((w = best(avg, false)) != null && isFinite(avg(pl[w]))) awards.push(['⚡', 'Blitzmerker*in', `${esc(pl[w].name)} – Ø ${msTxt(avg(pl[w]))} pro richtiger Antwort`]);
   if ((w = best(p => p.stats.laughs)) != null) awards.push(['😂', 'Quatschkopf', `${esc(pl[w].name)} – ${pl[w].stats.laughs} Lach-Punkte`]);
   if ((w = best(p => Object.keys(p.crowns).length)) != null) awards.push(['👑', 'Tresorknacker*in', `${esc(pl[w].name)} – ${Object.keys(pl[w].crowns).length} Kronen`]);
-  const pod = (i, cls) => { const p = pl[i]; return `<div class="pod ${cls}" style="--pc:${p.color}">${cls === 'first' && !tie ? '<div class="crown">👑</div>' : ''}<div class="podfig">${figureHTML(p, 'idle')}</div><b>${esc(p.name)}</b><div class="block">${p.score}<small style="font-family:Rubik;font-size:11px;font-weight:800">Punkte</small></div></div>`; };
+  const pod = (i, cls) => { const p = pl[i]; return `<div class="pod ${cls}" style="--pc:${p.color}">${cls === 'first' && !tie ? '<div class="crown">👑</div>' : ''}<div class="podfig">${figureHTML(p, 'idle')}</div><b>${esc(p.name)}</b><div class="block">${p.score}<small style="font-family:Rubik;font-size:11px;font-weight:800">Punkte${s.winBy === 'vault' ? ` · 🔐${p.vr || 0}` : ''}</small></div></div>`; };
   setAction(''); setStatus('');
   const meWon = !tie && win === C.me;
   const panel = openSheet(`<div class="intro" style="padding-top:6px"><h2 style="--cc:var(--yellow)">${tie ? 'UNENTSCHIEDEN!' : meWon ? 'DU GEWINNST!' : esc(pl[win].name).toUpperCase() + ' GEWINNT!'}</h2>
