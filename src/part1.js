@@ -31,10 +31,11 @@ const CATS = {
   wtf:      { n: 'Woher weißt du das?!',   s: 'WTF?!',    i: '🤯', c: '#c6ff3d', d: 'Komplett verrückte Fakten & kuriose Fragen' },
   frau:     { n: 'Alles rund um die Frau', s: 'Frau',     i: '💃', c: '#ffa3c4', d: 'Mode, Beauty, starke Frauen & Geschichte' },
   mann:     { n: 'Alles rund um den Mann', s: 'Mann',     i: '🧔', c: '#5b8cff', d: 'Werkzeug, Grill, Bier, Bart & Actionfilme' },
+  essen:    { n: 'Essen & Trinken',        s: 'Essen',    i: '🍝', c: '#ff7a45', d: 'Ernährung, Gerichte, Zutaten & Küche' },
 };
 const CAT_KEYS = Object.keys(CATS);
 const MODES = {
-  all:    { n: 'Alles muss rein', i: '🌈', d: 'Alle 11 Kategorien' },
+  all:    { n: 'Alles muss rein', i: '🌈', d: 'Alle 12 Kategorien' },
   caro:   { n: 'Caro-Modus',      i: '💖', d: 'Ohne Sport & Technik' },
   custom: { n: 'Individuell',     i: '🎛️', d: 'Du wählst aus' },
 };
@@ -113,7 +114,7 @@ function buildBoard(cats) {
   out[0] = { t: 'start' };
   // Schlüsselfelder: mindestens 3 pro Kategorie (genug Chancen für 3 Schlüssel), auf Ring & Wegen verteilt
   const slots = shuffle(RING.filter(i => i !== 0)).concat(shuffle(SPOKES)); // Ring zuerst
-  const catTotal = Math.min(slots.length - 8, Math.max(3 * k, 24));
+  const catTotal = Math.min(slots.length - 7, Math.max(3 * k, 24));
   const per = cats.map((c, i) => Math.floor(catTotal / k) + (i < catTotal % k ? 1 : 0));
   const POOL = ['pair', 'mind', 'est', 'free', 'bluff', 'emoji', 'draw', 'surprise', 'blitz', 'luck'];
   const specs = n => { let a = []; while (a.length < n) a = a.concat(shuffle(POOL)); return a.slice(0, n).map(t => ({ t })); };

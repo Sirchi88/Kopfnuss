@@ -50,7 +50,9 @@ Lasst den Bildschirm während des Spiels an. Der Host sollte die App nicht in de
 - **Designs:** 6 Würfel-Designs (Klassik, Neon, Gold, Galaxy, Candy, Holz) und 5 Spielfeld-Designs.
 - **⚙️ Einstellungen (Startseite):** Namen unter den Emojis bei der Auflösung ein- oder ausblenden.
 
-**Kategorien** (11): 🌍 Welt & Reisen · 🗺️ Erdkunde · 🌿 Tiere & Garten · 🫀 Körper & Gesundheit · 🏎️ Sport & Motor · 📱 Social & Stars · 💡 Technik & Alltag · 📺 Trash-TV · 🤯 Woher weißt du das?! · 💃 Alles rund um die Frau · 🧔 Alles rund um den Mann
+- **🔢 Sortier-Fragen:** Ab und zu kommt statt einer normalen Frage eine Sortierfrage: 4 Antworten in die richtige Reihenfolge tippen (z. B. Länder nach WM-Titeln). Alles richtig = Schlüssel, sonst +20 pro richtigem Platz.
+
+**Kategorien** (12): 🌍 Welt & Reisen · 🗺️ Erdkunde · 🌿 Tiere & Garten · 🫀 Körper & Gesundheit · 🏎️ Sport & Motor · 📱 Social & Stars · 💡 Technik & Alltag · 📺 Trash-TV · 🤯 Woher weißt du das?! · 💃 Alles rund um die Frau · 🧔 Alles rund um den Mann · 🍝 Essen & Trinken
 
 **Modi:**
 - **Alles muss rein:** alle Kategorien

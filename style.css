@@ -694,3 +694,17 @@ body[data-theme]:not([data-theme="neon"]) .grid-floor{opacity:.25;}
 .token.off{opacity:.45;filter:grayscale(1);}
 .opt .who span.wb{width:auto;height:auto;border:none;background:none;border-radius:0;font-size:inherit;display:flex;}
 .keybar.open{background:rgba(11,2,32,.97);position:relative;z-index:15;}
+
+/* ---------- Sortier-Fragen ---------- */
+.sorthint{font-size:12.5px;font-weight:800;opacity:.85;margin:6px 0 2px;text-align:center;}
+.opts.sortopts{grid-template-columns:1fr;gap:8px;}
+.sortopts .opt{min-height:52px;flex-direction:row;justify-content:flex-start;text-align:left;gap:12px;}
+.sortopts .opt .rk{min-width:34px;height:34px;display:grid;place-items:center;border-radius:50%;font-size:18px;font-weight:900;background:#f1f1f1;color:var(--ink);border:2.5px dashed #aaa;}
+.sortopts .opt.picked .rk{background:var(--lime);color:var(--ink);border:2px solid var(--ink);animation:pop .25s;}
+.sortres{display:grid;gap:7px;margin:10px 0;}
+.srow{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:14px;background:rgba(163,255,60,.14);border:2px solid var(--lime);font-weight:800;}
+.srow .k{min-width:30px;height:30px;display:grid;place-items:center;border-radius:50%;background:var(--lime);color:var(--ink);font-weight:900;}
+.srow .ot{flex:1;}
+.srow .who{display:flex;gap:3px;}
+.a-essen span{animation-name:aFood;}
+@keyframes aFood{0%{transform:translateY(-140px) rotate(-30deg);}35%{transform:translateY(0) scale(1.25,.75);}50%{transform:translateY(-25px) scale(.9,1.1) rotate(10deg);}65%{transform:translateY(0) scale(1.1,.9);}80%{transform:rotate(-8deg);}100%{transform:none;}}

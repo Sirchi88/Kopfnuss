@@ -296,6 +296,7 @@ class HostGame {
       if (Math.random() < (q.kind === 'tf' ? .7 : .6)) return q.answer;
       const wrong = q.options.map((_, i) => i).filter(i => i !== q.answer); return wrong[rand(wrong.length)];
     }
+    if (q.kind === 'sort') return Math.random() < .45 ? q.answer.slice() : shuffle(q.answer.slice());
     if (q.kind === 'est') { const v = q.answer * (.65 + Math.random() * .7); return Math.abs(q.answer) < 20 ? Math.round(v * 10) / 10 : Math.round(v); }
     if (q.kind === 'who') return rand(this.np);
     if (q.kind === 'mind' && q.subject === 0 && Math.random() < .35) return this.answers[0] ? this.answers[0].v : rand(q.options.length);
@@ -313,14 +314,15 @@ class HostGame {
     st.opts.forEach((o, i) => { const v = val(o) + Math.random() * 2.5; if (v > bv) { bv = v; best = i; } });
     return best;
   }
-  mcQ(cat) { const r = this.draw('mc_' + cat, Q.mc[cat]); const opts = shuffle(r.slice(1)); return { kind: 'mc', text: r[0], options: opts, answer: opts.indexOf(r[1]), cat }; }
+  sortQ(cat) { const r = this.draw('sort_' + cat, Q.sort[cat]); const opts = shuffle(r[1]); return { kind: 'sort', text: r[0], options: opts, answer: r[1].map(x => opts.indexOf(x)), top: r[2] || null, cat }; }
+  mcQ(cat) { if (Q.sort && Q.sort[cat] && Q.sort[cat].length && Math.random() < .2) return this.sortQ(cat); const r = this.draw('mc_' + cat, Q.mc[cat]); const opts = shuffle(r.slice(1)); return { kind: 'mc', text: r[0], options: opts, answer: opts.indexOf(r[1]), cat }; }
   tfQ() { const r = this.draw('tf', Q.tf); return { kind: 'tf', text: r[0], options: ['Wahr', 'Falsch'], answer: r[1] ? 0 : 1 }; }
   async ask(q, o = {}) {
-    const dur = o.dur || 15, mult = this.mult(), n = this.np, pl = this.s.players;
-    const pub = { kind: q.kind, text: q.text, self: q.self, options: q.options, unit: q.unit, subject: q.subject };
+    const dur = (o.dur || 15) + (q.kind === 'sort' ? 10 : 0), mult = this.mult(), n = this.np, pl = this.s.players;
+    const pub = { kind: q.kind, text: q.text, self: q.self, options: q.options, unit: q.unit, subject: q.subject, top: q.top };
     // Handicap: Wer mit 300+ Punkten führt, hat bei Wissensfragen weniger Zeit
     const durs = new Array(n).fill(dur), sc = pl.map(p => p.score), top = Math.max(...sc), second = sc.slice().sort((a, b) => b - a)[1] ?? top;
-    if (['mc', 'tf', 'est'].includes(q.kind) && top - second >= 300) durs[sc.indexOf(top)] = Math.max(3, Math.round(dur * .7));
+    if (['mc', 'tf', 'est', 'sort'].includes(q.kind) && top - second >= 300) durs[sc.indexOf(top)] = Math.max(3, Math.round(dur * .7));
     const base = { cat: q.cat || null, ft: o.ft || null, title: o.title || null, n: o.n || null, of: o.of || null, mover: o.mover ?? null, mult, vault: o.vault || null, keyFor: o.keyFor ?? null, keyNo: o.keyNo ?? null, durs };
     this.curQ = q;
     this.setStage(Object.assign({ type: 'q', q: pub, dur, answered: this.noAns() }, base));
@@ -335,7 +337,20 @@ class HostGame {
   score(q, A, durs, mult) {
     const pl = this.s.players, n = pl.length, pts = new Array(n).fill(0), correct = new Array(n).fill(false);
     let note = '', diffs = null, streak = 0, agree = false;
-    if (q.kind === 'mc' || q.kind === 'tf') {
+    if (q.kind === 'sort') {
+      A.forEach((a, i) => {
+        const st = pl[i].stats; st.ans++;
+        if (q.cat) { const c = st.cat[q.cat] || [0, 0]; c[1]++; st.cat[q.cat] = c; }
+        const v = a && Array.isArray(a.v) ? a.v : [], hits = q.answer.filter((x, k) => v[k] === x).length;
+        if (hits === q.answer.length) {
+          correct[i] = true; st.right++; st.ms += a.ms; if (q.cat) st.cat[q.cat][0]++;
+          pts[i] = Math.round((100 + 100 * Math.max(0, 1 - a.ms / (durs[i] * 1000))) * mult);
+        } else pts[i] = 20 * hits * mult;
+      });
+      const right = correct.map((c, i) => c ? i : -1).filter(i => i >= 0);
+      if (right.length > 1) { const f = right.sort((a, b) => A[a].ms - A[b].ms)[0]; note = `⚡ ${pl[f].name} hat am schnellsten sortiert!`; }
+      else if (!right.length) note = 'Keine perfekte Reihenfolge 🙈 – pro richtigem Platz gibt\'s +20.';
+    } else if (q.kind === 'mc' || q.kind === 'tf') {
       A.forEach((a, i) => {
         const st = pl[i].stats; st.ans++;
         if (q.cat) { const c = st.cat[q.cat] || [0, 0]; c[1]++; st.cat[q.cat] = c; }

@@ -31,10 +31,11 @@ const CATS = {
   wtf:      { n: 'Woher weißt du das?!',   s: 'WTF?!',    i: '🤯', c: '#c6ff3d', d: 'Komplett verrückte Fakten & kuriose Fragen' },
   frau:     { n: 'Alles rund um die Frau', s: 'Frau',     i: '💃', c: '#ffa3c4', d: 'Mode, Beauty, starke Frauen & Geschichte' },
   mann:     { n: 'Alles rund um den Mann', s: 'Mann',     i: '🧔', c: '#5b8cff', d: 'Werkzeug, Grill, Bier, Bart & Actionfilme' },
+  essen:    { n: 'Essen & Trinken',        s: 'Essen',    i: '🍝', c: '#ff7a45', d: 'Ernährung, Gerichte, Zutaten & Küche' },
 };
 const CAT_KEYS = Object.keys(CATS);
 const MODES = {
-  all:    { n: 'Alles muss rein', i: '🌈', d: 'Alle 11 Kategorien' },
+  all:    { n: 'Alles muss rein', i: '🌈', d: 'Alle 12 Kategorien' },
   caro:   { n: 'Caro-Modus',      i: '💖', d: 'Ohne Sport & Technik' },
   custom: { n: 'Individuell',     i: '🎛️', d: 'Du wählst aus' },
 };
@@ -113,7 +114,7 @@ function buildBoard(cats) {
   out[0] = { t: 'start' };
   // Schlüsselfelder: mindestens 3 pro Kategorie (genug Chancen für 3 Schlüssel), auf Ring & Wegen verteilt
   const slots = shuffle(RING.filter(i => i !== 0)).concat(shuffle(SPOKES)); // Ring zuerst
-  const catTotal = Math.min(slots.length - 8, Math.max(3 * k, 24));
+  const catTotal = Math.min(slots.length - 7, Math.max(3 * k, 24));
   const per = cats.map((c, i) => Math.floor(catTotal / k) + (i < catTotal % k ? 1 : 0));
   const POOL = ['pair', 'mind', 'est', 'free', 'bluff', 'emoji', 'draw', 'surprise', 'blitz', 'luck'];
   const specs = n => { let a = []; while (a.length < n) a = a.concat(shuffle(POOL)); return a.slice(0, n).map(t => ({ t })); };
@@ -717,6 +718,7 @@ class HostGame {
       if (Math.random() < (q.kind === 'tf' ? .7 : .6)) return q.answer;
       const wrong = q.options.map((_, i) => i).filter(i => i !== q.answer); return wrong[rand(wrong.length)];
     }
+    if (q.kind === 'sort') return Math.random() < .45 ? q.answer.slice() : shuffle(q.answer.slice());
     if (q.kind === 'est') { const v = q.answer * (.65 + Math.random() * .7); return Math.abs(q.answer) < 20 ? Math.round(v * 10) / 10 : Math.round(v); }
     if (q.kind === 'who') return rand(this.np);
     if (q.kind === 'mind' && q.subject === 0 && Math.random() < .35) return this.answers[0] ? this.answers[0].v : rand(q.options.length);
@@ -734,14 +736,15 @@ class HostGame {
     st.opts.forEach((o, i) => { const v = val(o) + Math.random() * 2.5; if (v > bv) { bv = v; best = i; } });
     return best;
   }
-  mcQ(cat) { const r = this.draw('mc_' + cat, Q.mc[cat]); const opts = shuffle(r.slice(1)); return { kind: 'mc', text: r[0], options: opts, answer: opts.indexOf(r[1]), cat }; }
+  sortQ(cat) { const r = this.draw('sort_' + cat, Q.sort[cat]); const opts = shuffle(r[1]); return { kind: 'sort', text: r[0], options: opts, answer: r[1].map(x => opts.indexOf(x)), top: r[2] || null, cat }; }
+  mcQ(cat) { if (Q.sort && Q.sort[cat] && Q.sort[cat].length && Math.random() < .2) return this.sortQ(cat); const r = this.draw('mc_' + cat, Q.mc[cat]); const opts = shuffle(r.slice(1)); return { kind: 'mc', text: r[0], options: opts, answer: opts.indexOf(r[1]), cat }; }
   tfQ() { const r = this.draw('tf', Q.tf); return { kind: 'tf', text: r[0], options: ['Wahr', 'Falsch'], answer: r[1] ? 0 : 1 }; }
   async ask(q, o = {}) {
-    const dur = o.dur || 15, mult = this.mult(), n = this.np, pl = this.s.players;
-    const pub = { kind: q.kind, text: q.text, self: q.self, options: q.options, unit: q.unit, subject: q.subject };
+    const dur = (o.dur || 15) + (q.kind === 'sort' ? 10 : 0), mult = this.mult(), n = this.np, pl = this.s.players;
+    const pub = { kind: q.kind, text: q.text, self: q.self, options: q.options, unit: q.unit, subject: q.subject, top: q.top };
     // Handicap: Wer mit 300+ Punkten führt, hat bei Wissensfragen weniger Zeit
     const durs = new Array(n).fill(dur), sc = pl.map(p => p.score), top = Math.max(...sc), second = sc.slice().sort((a, b) => b - a)[1] ?? top;
-    if (['mc', 'tf', 'est'].includes(q.kind) && top - second >= 300) durs[sc.indexOf(top)] = Math.max(3, Math.round(dur * .7));
+    if (['mc', 'tf', 'est', 'sort'].includes(q.kind) && top - second >= 300) durs[sc.indexOf(top)] = Math.max(3, Math.round(dur * .7));
     const base = { cat: q.cat || null, ft: o.ft || null, title: o.title || null, n: o.n || null, of: o.of || null, mover: o.mover ?? null, mult, vault: o.vault || null, keyFor: o.keyFor ?? null, keyNo: o.keyNo ?? null, durs };
     this.curQ = q;
     this.setStage(Object.assign({ type: 'q', q: pub, dur, answered: this.noAns() }, base));
@@ -756,7 +759,20 @@ class HostGame {
   score(q, A, durs, mult) {
     const pl = this.s.players, n = pl.length, pts = new Array(n).fill(0), correct = new Array(n).fill(false);
     let note = '', diffs = null, streak = 0, agree = false;
-    if (q.kind === 'mc' || q.kind === 'tf') {
+    if (q.kind === 'sort') {
+      A.forEach((a, i) => {
+        const st = pl[i].stats; st.ans++;
+        if (q.cat) { const c = st.cat[q.cat] || [0, 0]; c[1]++; st.cat[q.cat] = c; }
+        const v = a && Array.isArray(a.v) ? a.v : [], hits = q.answer.filter((x, k) => v[k] === x).length;
+        if (hits === q.answer.length) {
+          correct[i] = true; st.right++; st.ms += a.ms; if (q.cat) st.cat[q.cat][0]++;
+          pts[i] = Math.round((100 + 100 * Math.max(0, 1 - a.ms / (durs[i] * 1000))) * mult);
+        } else pts[i] = 20 * hits * mult;
+      });
+      const right = correct.map((c, i) => c ? i : -1).filter(i => i >= 0);
+      if (right.length > 1) { const f = right.sort((a, b) => A[a].ms - A[b].ms)[0]; note = `⚡ ${pl[f].name} hat am schnellsten sortiert!`; }
+      else if (!right.length) note = 'Keine perfekte Reihenfolge 🙈 – pro richtigem Platz gibt\'s +20.';
+    } else if (q.kind === 'mc' || q.kind === 'tf') {
       A.forEach((a, i) => {
         const st = pl[i].stats; st.ans++;
         if (q.cat) { const c = st.cat[q.cat] || [0, 0]; c[1]++; st.cat[q.cat] = c; }
@@ -1646,6 +1662,7 @@ function questionText(st) {
 function optsHTML(st) {
   const q = st.q;
   if (q.kind === 'who') return `<div class="opts who2 n${NP()}" id="opts">${C.s.players.map((p, i) => `<button class="opt" data-v="${i}" style="--pc:${p.color}"><span class="whofig">${figureHTML(p)}</span><span class="wname">${esc(p.name)}</span><span class="who"></span></button>`).join('')}</div>`;
+  if (q.kind === 'sort') return `<div class="sorthint">👆 Tippe der Reihe nach – <b>1 = ${esc(q.top || 'ganz oben')}</b>. Nochmal tippen = zurücknehmen.</div><div class="opts sortopts" id="opts">${q.options.map((o, i) => `<button class="opt" data-v="${i}"><span class="k rk"></span><span class="ot">${esc(o)}</span></button>`).join('')}</div>`;
   const keys = ['A', 'B', 'C', 'D'];
   return `<div class="opts ${q.kind === 'tf' ? 'tf' : ''}" id="opts">${q.options.map((o, i) => `<button class="opt" data-v="${i}"><span class="k">${keys[i]}</span><span class="ot">${q.kind === 'tf' ? (i === 0 ? '✅<br>' : '❌<br>') : ''}${esc(o)}</span><span class="who"></span></button>`).join('')}</div>`;
 }
@@ -1669,7 +1686,21 @@ function renderQuestion(st, s) {
   const panel = openSheet(`${headHTML(st)}${vaultPips(st.vault)}<div class="timer" id="timer"><i id="tbar"></i></div>${questionText(st)}${body}${oppLine(st)}`, color);
   vibrate(25);
   const lock = () => { const o = $('#opts', panel); if (o) o.classList.add('locked'); };
-  if (q.kind === 'est') {
+  if (q.kind === 'sort') {
+    const order = [], btns = $$('#opts .opt', panel);
+    panel.querySelector('#opts').insertAdjacentHTML('afterend', '<button class="btn lime" id="send" style="margin-top:10px" disabled>Reihenfolge einloggen ✅</button>');
+    const send = $('#send', panel);
+    const paint = () => { btns.forEach(b => { const k = order.indexOf(+b.dataset.v); b.classList.toggle('picked', k >= 0); b.querySelector('.rk').textContent = k >= 0 ? k + 1 : ''; }); send.disabled = order.length < btns.length; };
+    paint();
+    btns.forEach(b => b.onclick = () => {
+      if (C.myAns != null) return;
+      const v = +b.dataset.v, k = order.indexOf(v);
+      if (k >= 0) order.splice(k, 1); else order.push(v);
+      Sound.tone(500 + order.length * 120, .05, 'triangle', .05); vibrate(10); paint();
+    });
+    send.onclick = () => { if (order.length < btns.length) return; if (answer(st, order.slice())) { send.disabled = true; send.textContent = 'Eingeloggt ✓'; lock(); } };
+    startTimer(st, () => { if (C.myAns == null) { if (order.length) answer(st, order.slice()); lock(); send.disabled = true; send.textContent = '⏰ Zeit um!'; Sound.bad(); vibrate(100); } });
+  } else if (q.kind === 'est') {
     let val = '';
     const disp = $('#num', panel), send = $('#send', panel);
     const show = () => { disp.innerHTML = `${val ? esc(val.replace(/\B(?=(\d{3})+(?!\d))/g, '.')) : '&nbsp;'}<small>${esc(q.unit)}</small>`; };
@@ -1713,6 +1744,9 @@ function renderReveal(st, s) {
   if (q.kind === 'mc' || q.kind === 'tf' || q.kind === 'who' || q.kind === 'mind') {
     body = questionText(st) + optsHTML(st);
     extra = i => `<div class="rt">${st.picks[i] == null ? (st.only != null && st.only !== i ? '' : 'keine Antwort') : (q.kind === 'mc' || q.kind === 'tf') ? msTxt(st.ms[i]) : ''}</div>`;
+  } else if (q.kind === 'sort') {
+    body = `<div class="qtext">${esc(q.text)}</div><div class="sortres">${st.answer.map((oi, k) => `<div class="srow"><span class="k">${k + 1}</span><span class="ot">${esc(q.options[oi])}</span><span class="who">${s.players.map((p, i) => Array.isArray(st.picks[i]) && st.picks[i][k] === oi ? whoMark(p) : '').join('')}</span></div>`).join('')}</div>${q.top ? `<div class="center sorthint">1 = ${esc(q.top)}</div>` : ''}`;
+    extra = i => { const v = Array.isArray(st.picks[i]) ? st.picks[i] : null; return `<div class="rt">${v ? st.answer.filter((x, k) => v[k] === x).length + '/4 Plätze' : 'keine Antwort'}</div>`; };
   } else if (q.kind === 'est') {
     body = `<div class="qtext">${esc(q.text)}</div><div class="numdisp" style="background:var(--lime);color:var(--ink)">${fmtNum(st.answer)}<small style="color:var(--ink)">${esc(q.unit)}</small></div>`;
     extra = i => st.only != null && st.only !== i ? '' : `<div class="rv">${st.picks[i] == null ? '—' : fmtNum(st.picks[i])} ${esc(q.unit)}</div><div class="rt">${st.diffs && st.diffs[i] != null ? 'Abstand ' + fmtNum(st.diffs[i]) : 'keine Antwort'}</div>`;

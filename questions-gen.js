@@ -7,7 +7,7 @@ const rows = s => s.trim().split('\n').map(l => l.split('|').map(x => x.trim()))
 const seen = {};
 for (const k in Q.mc) seen[k] = new Set(Q.mc[k].map(q => q[0].toLowerCase()));
 // cat: Kategorie, list: Zeilen, ask: Frage-Text, a: Spalte der Antwort, group: optional Spalte für "gleiche Gruppe" bei Falschantworten
-const FIX = [[/^Was ist (Pumps|Espadrilles|Kitten Heels|Peeptoes|Mules)\?/, 'Was sind $1?'], [/man (Multimeter|Cuttermesser)\?/, 'man ein $1?'], [/gehört die (Arterien|Venen|Bronchien|Lymphknoten)\?/, 'gehören die $1?'], ['ein Retinol?', 'Retinol?'], ['ein Picanha?', 'Picanha?']];
+const FIX = [[/^Was ist (Pumps|Espadrilles|Kitten Heels|Peeptoes|Mules)\?/, 'Was sind $1?'], [/man (Multimeter|Cuttermesser)\?/, 'man ein $1?'], [/gehört die (Arterien|Venen|Bronchien|Lymphknoten)\?/, 'gehören die $1?'], ['ein Retinol?', 'Retinol?'], ['ein Picanha?', 'Picanha?'], [/besteht (Walnüsse|Nudeln|Kartoffeln|Haferflocken) /, 'bestehen $1 ']];
 function gen(cat, list, ask, a = 1, group = -1) {
   Q.mc[cat] = Q.mc[cat] || []; seen[cat] = seen[cat] || new Set();
   const all = [...new Set(list.map(r => r[a]))];
@@ -2414,5 +2414,239 @@ Camp Nou|FC Barcelona
 Santiago Bernabéu|Real Madrid
 `);
 gen('mann', STAD, r => `Welcher Verein spielt im Stadion „${r[0]}“?`);
+
+
+/* ================= ESSEN & TRINKEN ================= */
+const ING = rows(`
+Guacamole|Avocado
+Hummus|Kichererbsen
+Falafel|Kichererbsen
+Pesto alla genovese|Basilikum
+Tofu|Sojabohnen
+Miso|Sojabohnen
+Polenta|Maisgrieß
+Popcorn|Mais
+Couscous|Hartweizengrieß
+Sauerkraut|Weißkohl
+Kimchi|Chinakohl
+Marzipan|Mandeln
+Nutella|Haselnüsse
+Ketchup|Tomaten
+Gazpacho|Tomaten
+Tahini|Sesam
+Baba Ganoush|Auberginen
+Borschtsch|Rote Bete
+Rösti|Kartoffeln
+Gnocchi|Kartoffeln
+Risotto|Rundkornreis
+Mayonnaise|Eigelb & Öl
+Pumpernickel|Roggen
+Bulgur|Weizen
+Tapioka|Maniok
+Seitan|Weizeneiweiß (Gluten)
+Ratatouille|Gemüse wie Zucchini & Aubergine
+Tzatziki|Joghurt & Gurke
+Zabaione|Eigelb, Zucker & Wein
+Hollandaise|Eigelb & Butter
+`);
+gen('essen', ING, r => `Was ist die wichtigste Zutat von ${r[0]}?`);
+const CHEESE = rows(`
+Parmesan|Italien
+Mozzarella|Italien
+Gorgonzola|Italien
+Pecorino|Italien
+Gouda|Niederlande
+Edamer|Niederlande
+Emmentaler|Schweiz
+Gruyère|Schweiz
+Appenzeller|Schweiz
+Raclette|Schweiz
+Camembert|Frankreich
+Roquefort|Frankreich
+Brie|Frankreich
+Feta|Griechenland
+Halloumi|Zypern
+Manchego|Spanien
+Cheddar|England
+Harzer Käse|Deutschland
+Allgäuer Bergkäse|Deutschland
+`);
+gen('essen', CHEESE, r => `Aus welchem Land stammt der Käse ${r[0]}?`);
+const DRINKS = rows(`
+Champagner|Frankreich
+Prosecco|Italien
+Cava|Spanien
+Portwein|Portugal
+Sherry|Spanien
+Chianti|Italien
+Rioja|Spanien
+Tokajer|Ungarn
+Retsina|Griechenland
+Ouzo|Griechenland
+Grappa|Italien
+Sake|Japan
+Tequila|Mexiko
+Raki|Türkei
+Kölsch|Deutschland
+Scotch Whisky|Schottland
+Guinness|Irland
+`);
+gen('essen', DRINKS, r => `Aus welchem Land stammt ${r[0]}?`);
+const TERM = rows(`
+Blanchieren|Kurz in kochendes Wasser geben, dann abschrecken
+Pochieren|In heißer, nicht kochender Flüssigkeit garen
+Flambieren|Mit Alkohol übergießen und anzünden
+Frittieren|In heißem Fett schwimmend ausbacken
+Dünsten|Mit wenig Flüssigkeit im eigenen Saft garen
+Schmoren|Erst anbraten, dann in Flüssigkeit garen
+Legieren|Mit Eigelb oder Sahne binden
+Plattieren|Fleisch flach klopfen
+Julienne|In ganz feine Streifen schneiden
+Al dente|Bissfest gegart
+Reduzieren|Flüssigkeit einkochen lassen
+Marinieren|In eine Würzflüssigkeit einlegen
+Abschrecken|In eiskaltes Wasser tauchen
+Tranchieren|Fleisch in Scheiben schneiden
+Glasieren|Mit einem glänzenden Überzug versehen
+Sous-vide|Vakuumiert im Wasserbad garen
+Mehlieren|In Mehl wenden
+Panieren|In Mehl, Ei und Bröseln wenden
+Gratinieren|Überbacken, bis eine Kruste entsteht
+Karamellisieren|Zucker erhitzen, bis er braun wird
+`);
+gen('essen', TERM, r => `Was bedeutet „${r[0]}“ in der Küche?`);
+gen('essen', TERM, r => `Wie heißt das in der Küche: ${r[1]}?`, 0);
+const NUTR = rows(`
+Olivenöl|Fett
+Butter|Fett
+Speck|Fett
+Walnüsse|Fett
+Avocado|Fett
+Reis|Kohlenhydrate
+Nudeln|Kohlenhydrate
+Kartoffeln|Kohlenhydrate
+Honig|Kohlenhydrate
+Haferflocken|Kohlenhydrate
+Hähnchenbrust|Eiweiß
+Magerquark|Eiweiß
+Thunfisch|Eiweiß
+Eiklar|Eiweiß
+Gurke|Wasser
+Wassermelone|Wasser
+Tomate|Wasser
+Kopfsalat|Wasser
+`);
+gen('essen', NUTR, r => `Woraus besteht ${r[0]} hauptsächlich?`);
+const REG = rows(`
+Weißwurst|Bayern
+Nürnberger Lebkuchen|Bayern
+Maultaschen|Baden-Württemberg
+Schwarzwälder Kirschtorte|Baden-Württemberg
+Saumagen|Rheinland-Pfalz
+Thüringer Rostbratwurst|Thüringen
+Himmel un Ääd|Nordrhein-Westfalen
+Aachener Printen|Nordrhein-Westfalen
+Grüne Soße|Hessen
+Handkäs mit Musik|Hessen
+Frankfurter Kranz|Hessen
+Dresdner Christstollen|Sachsen
+Leipziger Allerlei|Sachsen
+Currywurst|Berlin
+Spreewaldgurken|Brandenburg
+Lübecker Marzipan|Schleswig-Holstein
+Kieler Sprotten|Schleswig-Holstein
+Mecklenburger Rippenbraten|Mecklenburg-Vorpommern
+Halberstädter Würstchen|Sachsen-Anhalt
+Dibbelabbes|Saarland
+Bremer Klaben|Bremen
+`);
+gen('essen', REG, r => `Aus welchem Bundesland stammt die Spezialität „${r[0]}“?`);
+const ANIM = rows(`
+Kaviar|Stör
+Parmaschinken|Schwein
+Serrano-Schinken|Schwein
+Chorizo|Schwein
+Lardo|Schwein
+Bresaola|Rind
+Bündnerfleisch|Rind
+Pastrami|Rind
+Foie gras|Ente oder Gans
+Pecorino|Schaf
+Roquefort|Schaf
+Mozzarella di Bufala|Wasserbüffel
+Wiener Schnitzel (Original)|Kalb
+Ossobuco|Kalb
+`);
+gen('essen', ANIM, r => `Von welchem Tier stammt ${r[0]}?`);
+const COFFEE = rows(`
+Cappuccino|Espresso mit Milchschaum
+Latte Macchiato|Heiße Milch mit Espresso, in Schichten im Glas
+Americano|Espresso mit heißem Wasser verlängert
+Ristretto|Extra kurzer, starker Espresso
+Lungo|Länger durchgelaufener Espresso
+Affogato|Espresso über Vanilleeis
+Irish Coffee|Kaffee mit Whiskey und Sahne
+Eiskaffee|Kaffee mit Vanilleeis und Sahne
+Caffè corretto|Espresso mit einem Schuss Schnaps
+Cortado|Espresso mit wenig warmer Milch
+Flat White|Doppelter Espresso mit feinem, flachem Milchschaum
+`);
+gen('essen', COFFEE, r => `Was ist ein ${r[0]}?`);
+gen('essen', COFFEE, r => `Wie heißt dieses Kaffeegetränk: ${r[1]}?`, 0);
+const PASTA = rows(`
+Farfalle|Schmetterlinge
+Penne|Schräg geschnittene Röhren
+Fusilli|Spiralen
+Orecchiette|Öhrchen
+Linguine|Flache, schmale „Zungen“
+Conchiglie|Muscheln
+Tagliatelle|Bandnudeln
+Rigatoni|Dicke, geriffelte Röhren
+Ravioli|Gefüllte Teigkissen
+Tortellini|Gefüllte Teigringe
+Lasagne|Breite Teigplatten
+Cannelloni|Große Röhren zum Füllen
+`);
+gen('essen', PASTA, r => `Welche Form haben ${r[0]}?`);
+gen('essen', PASTA, r => `Welche Pasta-Sorte ist das: ${r[1]}?`, 0);
+const SUSHI = rows(`
+Nigiri|Reisbällchen mit Belag obendrauf
+Maki|Rolle mit Algenblatt außen
+Sashimi|Roher Fisch ohne Reis
+Inside-Out-Roll|Rolle mit Reis außen
+Wasabi|Scharfe grüne Paste
+Gari|Eingelegter Ingwer
+Nori|Getrocknetes Algenblatt
+Temaki|Tüte aus Algenblatt
+Edamame|Junge Sojabohnen in der Schote
+`);
+gen('essen', SUSHI, r => `Was ist ${r[0]} beim Japaner?`);
+const DISH2 = rows(`
+Paella|Spanien
+Tapas|Spanien
+Churros|Spanien
+Carbonara|Italien
+Ossobuco|Italien
+Panna cotta|Italien
+Quiche Lorraine|Frankreich
+Croque Monsieur|Frankreich
+Crêpes|Frankreich
+Souvlaki|Griechenland
+Börek|Türkei
+Lahmacun|Türkei
+Pierogi|Polen
+Gulasch|Ungarn
+Smørrebrød|Dänemark
+Pho|Vietnam
+Pad Thai|Thailand
+Bibimbap|Südkorea
+Burrito|Mexiko
+Pastel de Nata|Portugal
+Cevapcici|Balkan (z. B. Serbien)
+Shakshuka|Nordafrika & Naher Osten
+Pavlova|Australien & Neuseeland
+Bagel|Jüdisch-osteuropäische Küche
+`);
+gen('essen', DISH2, r => `Wo hat das Gericht „${r[0]}“ seinen Ursprung?`);
 
 })();
