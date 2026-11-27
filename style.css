@@ -741,3 +741,39 @@ body[data-theme]:not([data-theme="neon"]) .grid-floor{opacity:.25;}
 .board.lp-board{grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);transform:rotateX(24deg);animation:lpBoard 1.5s ease-out both;}
 @keyframes lpBoard{from{transform:rotateX(60deg) scale(.6);opacity:0;}35%{opacity:1;}to{transform:rotateX(24deg) scale(1);}}
 @keyframes lpIn{from{opacity:0;}}
+
+/* ---------- Mini-Chat ---------- */
+.chatbtn{position:fixed;z-index:65;top:calc(var(--safe-top) + 126px);right:max(8px,calc(50vw - 252px));width:40px;height:40px;border-radius:50%;border:2.5px solid var(--ink);background:#fff;font-size:20px;line-height:1;display:grid;place-items:center;box-shadow:0 3px 0 var(--ink);opacity:.9;padding:0;}
+.chatbtn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink);}
+.chatbtn i{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--pink);color:#fff;font:900 11px/18px system-ui;font-style:normal;border:2px solid var(--ink);display:none;}
+.chatbtn i.on{display:block;}
+.chatpanel{position:fixed;z-index:66;top:calc(var(--safe-top) + 172px);right:max(8px,calc(50vw - 252px));width:min(330px,calc(100vw - 16px));background:linear-gradient(180deg,#2a0f66,#16063a);border:3px solid var(--ink);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.6);padding:10px;display:none;flex-direction:column;gap:8px;}
+.chatpanel.on{display:flex;animation:lpIn .15s ease-out;}
+.chead{display:flex;align-items:center;gap:8px;}
+.chead b{flex:1;font-size:14px;}
+.ccall{font-size:12px;font-weight:900;background:var(--lime);color:var(--ink);border:2px solid var(--ink);border-radius:999px;padding:3px 9px;text-decoration:none;}
+.cx{background:none;border:none;color:#fff;font-size:18px;padding:0 4px;}
+.clist{max-height:30vh;overflow:auto;display:flex;flex-direction:column;gap:6px;}
+.cempty{font-size:13px;opacity:.7;text-align:center;padding:10px 0;}
+.cmsg{display:flex;gap:6px;align-items:flex-end;}
+.cmsg .ch{font-size:20px;line-height:1;}
+.cmsg div{background:#fff;color:var(--ink);border:2px solid var(--pc);border-radius:12px 12px 12px 3px;padding:4px 9px;font-weight:700;font-size:14px;max-width:82%;word-break:break-word;}
+.cmsg small{display:block;font-size:10px;font-weight:900;opacity:.6;}
+.cmsg.mine{flex-direction:row-reverse;}
+.cmsg.mine div{border-radius:12px 12px 3px 12px;background:#fff6c2;}
+.cquick{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
+.cquick button{flex:none;border:2px solid var(--ink);border-radius:999px;background:#fff;color:var(--ink);font-weight:800;font-size:12.5px;padding:4px 9px;}
+.cform{display:flex;gap:6px;}
+.cform input{flex:1;min-width:0;border:2.5px solid var(--ink);border-radius:12px;padding:8px 10px;font-size:16px;font-weight:700;}
+.cform button{border:2.5px solid var(--ink);border-radius:12px;background:var(--lime);font-size:16px;font-weight:900;padding:0 12px;}
+.chatpop{position:fixed;z-index:64;top:calc(var(--safe-top) + 128px);right:calc(max(8px,calc(50vw - 252px)) + 48px);max-width:min(260px,calc(100vw - 70px));pointer-events:none;opacity:0;transform:translateX(10px) scale(.9);transition:opacity .2s,transform .2s;}
+.chatpop.on{opacity:1;transform:none;pointer-events:auto;}
+/* Einladen & Anruf */
+.invrow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:6px;align-items:center;}
+.invrow .input{flex:1;min-width:0;margin:0;}
+.btn.wa{background:#25d366;color:var(--ink);text-decoration:none;}
+.callcard a.btn{text-decoration:none;}
+.callcard small{font-size:12.5px;line-height:1.35;}
+body[data-scr="lobby"] .chatbtn{top:calc(var(--safe-top) + 12px);right:calc(max(16px,calc(50vw - 244px)) + 56px);}
+body[data-scr="lobby"] .chatpanel{top:calc(var(--safe-top) + 60px);}
+body[data-scr="lobby"] .chatpop{top:calc(var(--safe-top) + 58px);right:max(8px,calc(50vw - 252px));}

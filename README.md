@@ -9,6 +9,11 @@ Ein schnelles, buntes Quiz-Brettspiel fürs Handy, inspiriert von Party-Quizspie
 3. Die anderen (bis zu 3) tippen auf **Mit Code beitreten** und geben den Code ein.
 4. Der Host wählt Kategorien, Spiellänge (6 bis 50 Runden), Siegmodus, Würfel-Design und Spielfeld-Design und startet das Spiel.
 
+**Einladen & reden:**
+- „📲 Per WhatsApp einladen“ schickt den Code samt Link.
+- Für einen Sprach-Anruf: in WhatsApp unter *Anrufe → Anruf-Link erstellen* einen Link erzeugen und in der Lobby einfügen. Alle sehen dann „📞 Dem Anruf beitreten“. Der Anruf läuft im Hintergrund weiter.
+- Über die kleine 💬-Blase könnt ihr euch in Lobby und Spiel kurze Nachrichten und Schnell-Antworten schicken.
+
 **Allein reinschnuppern:** Mit „🤖 Übungsspiel gegen den Computer“ spielst du gegen Robo. Übungsspiele zählen nicht in die Statistik.
 
 **Tipp:** Über „Teilen“ → „Zum Home-Bildschirm“ wird KOPFNUSS wie eine echte App gestartet.

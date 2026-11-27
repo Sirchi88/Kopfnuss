@@ -15,6 +15,8 @@ const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { c
 const fmtNum = n => (Math.round(n * 100) / 100).toLocaleString('de-DE');
 const vibrate = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
 const PARAMS = new URLSearchParams(location.search);
+const CALL_RE = /^https:\/\/call\.whatsapp\.com\/[A-Za-z0-9_\/-]{4,120}$/;
+const QUICK_CHAT = ['😂', '🔥', '😱', '🙈', 'Glück gehabt! 🍀', 'Das war knapp!', 'Na warte … 😤', 'GG 🤝', 'Schnell, schnell! ⏰', 'Ich wusste das! 🧠'];
 const LOCAL = PARAMS.has('local');
 const TILT = 30, MAX_PLAYERS = 4;
 

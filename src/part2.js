@@ -14,7 +14,7 @@ class HostGame {
     const saved = store.get('kn_settings', null);
     const settings = Object.assign({ turns: 10, mode: 'all', custom: CAT_KEYS.slice(), relation: 'love', win: 'points', dice: 'classic', theme: 'neon' }, saved || {});
     const cats = resolveCats(settings);
-    this.s = { phase: 'lobby', code, players: [newPlayer(P, 0)], settings, cats, fields: buildBoard(cats), turn: 0, turnNo: 0, totalTurns: 20, final: false, lastDice: [3, 5], stage: { id: 0, type: 'lobby' }, toast: null, online: false, gameId: '' };
+    this.s = { phase: 'lobby', code, players: [newPlayer(P, 0)], settings, cats, fields: buildBoard(cats), turn: 0, turnNo: 0, totalTurns: 20, final: false, lastDice: [3, 5], stage: { id: 0, type: 'lobby' }, toast: null, online: false, gameId: '', chat: [] };
   }
   get np() { return this.s.players.length; }
   attach(transport) { this.t = transport; }
@@ -88,9 +88,19 @@ class HostGame {
           st.answered[i] = true; this.push();
         } break;
       case 'next': if (a.sid === st.id) this.nexts[i] = true; break;
+      case 'chat': {
+        const pl = this.s.players[i], text = String(a.text || '').replace(/\s+/g, ' ').trim().slice(0, 120), now = Date.now();
+        if (!pl || !text) break;
+        this.chatT = this.chatT || []; if (now - (this.chatT[i] || 0) < 600) break; this.chatT[i] = now;
+        this.chatId = (this.chatId || 0) + 1;
+        this.s.chat = (this.s.chat || []).concat({ id: this.chatId, p: i, n: pl.name, h: pl.head, c: pl.color, t: text }).slice(-30);
+        this.push();
+        if (this.bot && i === 0 && Math.random() < .5) setTimeout(() => this.onAction(1, { type: 'chat', text: ['😂', 'Ha! 🤖', 'Nicht schlecht!', 'Abwarten …', '🔥', 'Beep boop 😎', 'Ich rechne noch …'][rand(7)] }), 1200 + rand(1500));
+      } break;
       case 'settings':
         if (i === 0 && this.s.phase === 'lobby') {
-          Object.assign(this.s.settings, a.patch || {});
+          const pt = Object.assign({}, a.patch || {}); if ('call' in pt && pt.call && !CALL_RE.test(pt.call)) delete pt.call;
+          Object.assign(this.s.settings, pt);
           store.set('kn_settings', this.s.settings);
           this.s.cats = resolveCats(this.s.settings);
           if (this.s.cats.length >= 3 && (a.patch.mode || a.patch.custom)) this.s.fields = buildBoard(this.s.cats);

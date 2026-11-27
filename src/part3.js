@@ -64,7 +64,7 @@ function leaveGame() {
 }
 
 /* ---------------- Screens ---------------- */
-function setScreen(name, html) { C.screen = name; app.innerHTML = `<section class="screen ${name}">${html}</section>`; return app.firstElementChild; }
+function setScreen(name, html) { C.screen = name; chatShow(name === 'lobby' || name === 'game'); app.innerHTML = `<section class="screen ${name}">${html}</section>`; return app.firstElementChild; }
 const logoHTML = (cls = '') => `<div class="logo ${cls}">${'KOPFNUSS'.split('').map((l, i) => `<span style="animation-delay:${i * 60}ms">${l}</span>`).join('')}</div>`;
 
 function showSplash() {
@@ -275,7 +275,57 @@ function onState(s) {
   if (s.toast && s.toast.id !== C.toastId) { C.toastId = s.toast.id; if (C.screen === 'game' || C.screen === 'lobby') toast(s.toast.text); }
   if (s.phase === 'lobby') renderLobby(s);
   else renderGame(s);
+  chatUpdate(s);
 }
+
+/* ---------- Mini-Chat: kleine Blase, aufklappbar ---------- */
+const CH = { open: false, seen: 0, unread: 0, init: false };
+function chatInit() {
+  if (CH.init) return; CH.init = true;
+  const b = document.createElement('button'); b.id = 'chatbtn'; b.className = 'chatbtn'; b.innerHTML = '💬<i id="chatbadge"></i>';
+  const pan = document.createElement('div'); pan.id = 'chatpanel'; pan.className = 'chatpanel';
+  const pop = document.createElement('div'); pop.id = 'chatpop'; pop.className = 'chatpop';
+  document.body.append(b, pan, pop);
+  b.onclick = () => { Sound.click(); CH.open ? chatClose() : chatOpen(); };
+  pop.onclick = () => { pop.classList.remove('on'); chatOpen(); };
+}
+function chatShow(on) { chatInit(); document.body.dataset.scr = C.screen; $('#chatbtn').style.display = on ? '' : 'none'; if (!on) { chatClose(); $('#chatpop').classList.remove('on'); } }
+function chatMsgHTML(m) { const mine = m.p === C.me && C.s && C.s.players[m.p] && C.s.players[m.p].name === m.n; return `<div class="cmsg ${mine ? 'mine' : ''}" style="--pc:${m.c}"><span class="ch">${esc(m.h)}</span><div><small>${esc(m.n)}</small>${esc(m.t)}</div></div>`; }
+function chatOpen() {
+  const s = C.s; if (!s) return;
+  CH.open = true; CH.unread = 0; chatBadge();
+  const pan = $('#chatpanel'), call = s.settings && CALL_RE.test(s.settings.call || '') ? s.settings.call : '';
+  pan.innerHTML = `<div class="chead"><b>💬 Chat</b>${call ? `<a class="ccall" href="${esc(call)}" target="_blank" rel="noopener">📞 Anruf</a>` : ''}<button class="cx" id="chatx">✕</button></div>
+    <div class="clist" id="clist">${(s.chat || []).map(chatMsgHTML).join('') || '<div class="cempty">Noch keine Nachrichten. Schreib was! 😄</div>'}</div>
+    <div class="cquick">${QUICK_CHAT.map(q => `<button data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+    <form class="cform" id="cform"><input id="cin" maxlength="120" placeholder="Nachricht …" autocomplete="off" enterkeyhint="send"><button>➤</button></form>`;
+  pan.classList.add('on');
+  const list = $('#clist'); list.scrollTop = list.scrollHeight;
+  $('#chatx').onclick = chatClose;
+  $$('.cquick button', pan).forEach(b => b.onclick = () => chatSend(b.dataset.q));
+  $('#cform').onsubmit = e => { e.preventDefault(); const i = $('#cin'); if (i.value.trim()) { chatSend(i.value); i.value = ''; } i.blur(); setTimeout(resetViewport, 120); };
+}
+function chatClose() { CH.open = false; const p = $('#chatpanel'); if (p) p.classList.remove('on'); const i = $('#cin'); if (i) i.blur(); }
+function chatSend(text) { act({ type: 'chat', text }); vibrate(10); Sound.tone(900, .05, 'triangle', .04); }
+function chatBadge() { const b = $('#chatbadge'); if (b) { b.textContent = CH.unread > 9 ? '9+' : CH.unread || ''; b.classList.toggle('on', CH.unread > 0); } }
+function chatUpdate(s) {
+  const msgs = s.chat || [], last = msgs.length ? msgs[msgs.length - 1].id : 0;
+  if (!CH.seenInit) { CH.seenInit = true; CH.seen = last; return; }
+  if (last < CH.seen) CH.seen = 0;
+  const fresh = msgs.filter(m => m.id > CH.seen); CH.seen = last;
+  if (!fresh.length) return;
+  if (CH.open) {
+    const list = $('#clist'); if (list) { const e = list.querySelector('.cempty'); e && e.remove(); list.insertAdjacentHTML('beforeend', fresh.map(chatMsgHTML).join('')); list.scrollTop = list.scrollHeight; }
+    return;
+  }
+  const other = fresh.filter(m => m.p !== C.me); if (!other.length) return;
+  CH.unread += other.length; chatBadge();
+  const m = other[other.length - 1], pop = $('#chatpop');
+  pop.innerHTML = chatMsgHTML(m); pop.classList.remove('on'); void pop.offsetWidth; pop.classList.add('on');
+  clearTimeout(CH.popT); CH.popT = setTimeout(() => pop.classList.remove('on'), 3500);
+  Sound.tone(1200, .06, 'sine', .05); vibrate(15);
+}
+
 
 function renderLobby(s) {
   const isHost = C.isHost, pl = s.players, ready = pl.length >= 2, st = s.settings, catsOk = s.cats.length >= 3, bot = s.code === 'BOT';
@@ -291,8 +341,10 @@ function renderLobby(s) {
     ${bot ? `<div class="card col center"><div class="label">Übungsspiel</div><div style="font-size:44px">🤖</div><div style="font-weight:800">Du spielst gegen Robo, den Computer. Perfekt zum Reinschnuppern!</div></div>` : `<div class="card col center">
       <div class="label">Spiel-Code</div>
       ${codeHTML}
-      ${isHost ? `<p class="muted" style="margin:4px 0 0;font-weight:700;font-size:14px">Bis zu 3 Mitspieler geben diesen Code ein</p>${navigator.share ? '<button class="btn ghost small" id="share" style="align-self:center">📤 Einladung teilen</button>' : ''}` : ''}
-    </div>`}
+      ${isHost ? `<p class="muted" style="margin:4px 0 0;font-weight:700;font-size:14px">Bis zu 3 Mitspieler geben diesen Code ein</p>
+        <div class="invrow"><a class="btn small wa" id="wa" href="${waLink(s)}" target="_blank" rel="noopener">📲 Per WhatsApp einladen</a>${navigator.share ? '<button class="btn ghost small" id="share">📤 Teilen</button>' : ''}</div>` : ''}
+    </div>
+    ${callCard(s, isHost)}`}
     <div class="slots n${nSlots}">${Array.from({ length: nSlots }, (_, i) => slot(pl[i], i)).join('')}</div>
     <div class="card col">
       <div class="label">Wer spielt?</div>
@@ -332,12 +384,36 @@ function renderLobby(s) {
     $$('[data-kick]', el).forEach(b => b.onclick = () => { if (confirm('Spieler aus der Lobby entfernen?')) act({ type: 'kick', i: +b.dataset.kick }); });
     $$('.chip[data-cat]', el).forEach(b => b.onclick = () => { const c = b.dataset.cat, cur = st.custom.slice(); set({ custom: cur.includes(c) ? cur.filter(x => x !== c) : cur.concat(c) }); });
     const sb = $('#start', el); if (sb) sb.onclick = () => { Sound.fanfare(); C.lobbyAnimDone = false; act({ type: 'start' }); };
+    const ci = $('#callin', el);
+    if (ci) ci.oninput = () => { const v = ci.value.trim(); if (CALL_RE.test(v)) { ci.blur(); setTimeout(resetViewport, 120); set({ call: v }); } else $('#callmsg', el).textContent = v ? '⚠️ Das ist kein WhatsApp-Anruf-Link (call.whatsapp.com/…)' : ''; };
+    const cp = $('#callpaste', el);
+    if (cp) cp.onclick = async () => { try { const v = (await navigator.clipboard.readText()).trim(); if (CALL_RE.test(v)) set({ call: v }); else $('#callmsg', el).textContent = '⚠️ In der Zwischenablage ist kein WhatsApp-Anruf-Link.'; } catch (e) { $('#callmsg', el).textContent = 'Bitte den Link ins Feld einfügen (lange tippen → Einsetzen).'; } };
+    const cr = $('#callrm', el); if (cr) cr.onclick = () => set({ call: '' });
     const sh = $('#share', el);
     if (sh) sh.onclick = () => {
       const url = location.origin + location.pathname + '?join=' + s.code + (LOCAL ? '&local' : '');
       navigator.share({ title: 'KOPFNUSS', text: `Komm ins Quiz-Duell! Code: ${s.code}`, url }).catch(() => {});
     };
   }
+}
+
+function joinUrl(s) { return location.origin + location.pathname + '?join=' + s.code + (LOCAL ? '&local' : ''); }
+function waLink(s) {
+  const call = s.settings && CALL_RE.test(s.settings.call || '') ? s.settings.call : '';
+  const text = `🧠 Komm in mein KOPFNUSS-Quiz!\nCode: ${s.code}\n👉 ${joinUrl(s)}` + (call ? `\n\n📞 Sprach-Anruf: ${call}` : '');
+  return 'https://wa.me/?text=' + encodeURIComponent(text);
+}
+function callCard(s, isHost) {
+  const call = s.settings && CALL_RE.test(s.settings.call || '') ? s.settings.call : '';
+  if (call) return `<div class="card col center callcard"><div class="label">📞 WhatsApp-Anruf</div>
+    <a class="btn lime" href="${esc(call)}" target="_blank" rel="noopener">📞 Dem Anruf beitreten</a>
+    <small class="muted">Anruf läuft im Hintergrund weiter – danach einfach zurück zu KOPFNUSS wechseln.</small>
+    ${isHost ? '<button class="btn ghost small" id="callrm" style="align-self:center">✕ Anruf-Link entfernen</button>' : ''}</div>`;
+  if (!isHost) return '';
+  return `<div class="card col callcard"><div class="label">📞 Zusammen reden? (optional)</div>
+    <small class="muted" style="font-weight:700">WhatsApp → <b>Anrufe</b> → <b>Anruf-Link erstellen</b> → Link kopieren und hier einfügen. Dann können alle mit einem Tipp beitreten.</small>
+    <div class="invrow"><input class="input" id="callin" placeholder="https://call.whatsapp.com/…" autocomplete="off" inputmode="url"><button class="btn small" id="callpaste">📋 Einfügen</button></div>
+    <small id="callmsg" style="color:var(--yellow);font-weight:800"></small></div>`;
 }
 
 /* ---------- Spielbildschirm ---------- */
