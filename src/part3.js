@@ -34,6 +34,20 @@ document.addEventListener('focusout', () => setTimeout(resetViewport, 60));
 if (window.visualViewport) { visualViewport.addEventListener('resize', () => setTimeout(resetViewport, 60)); visualViewport.addEventListener('scroll', () => setTimeout(resetViewport, 60)); }
 window.addEventListener('scroll', () => { if (window.scrollY) resetViewport(); });
 
+// Kurze Vorschau mitten am Bildschirm, wenn ein Würfel- oder Spielfeld-Design gewählt wird
+function lookPreview(kind, val) {
+  const old = $('#lookprev'); if (old) old.remove();
+  clearTimeout(C.lookT);
+  if (kind === 'dice') document.body.dataset.dice = val; else document.body.dataset.theme = val;
+  const el = document.createElement('div'); el.id = 'lookprev'; el.className = 'lookprev';
+  const cats = Object.values(CATS).slice(0, 8);
+  el.innerHTML = kind === 'dice'
+    ? `<div class="lp-dice"><div class="dicebox"><div class="dice">${diceFaces()}</div></div></div><b>${esc(DICE[val] || val)}</b>`
+    : `<div class="lp-wrap"><div class="board lp-board">${cats.map((c, i) => `<div class="field" style="--fc:${c.c};--d:${i}"><span class="fi">${c.i}</span></div>`).join('')}<div class="field vault lp-v" style="--fc:#ffd60a"><span class="fi">🔐</span></div></div></div><b>${esc(THEMES[val] || val)}</b>`;
+  document.body.appendChild(el);
+  C.lookT = setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, 1500);
+  el.onclick = () => el.remove();
+}
 function applyLook(st) {
   document.body.dataset.theme = (st && st.theme) || 'neon';
   document.body.dataset.dice = (st && st.dice) || 'classic';
@@ -288,9 +302,9 @@ function renderLobby(s) {
       <div class="chips">${chips}</div>
       ${catsOk ? '' : '<div class="center" style="color:var(--pink);font-weight:900">Mindestens 3 Kategorien wählen!</div>'}
       <div class="label">Spiellänge</div>
-      <div class="seg">${[[6, 'Quickie', '~10 Min'], [10, 'Normal', '~20 Min'], [15, 'Lang', '~30 Min'], [25, 'Marathon', '~50 Min'], [50, 'Mega', '~1,5 Std']].map(([v, n, d]) => `<button data-t="${v}" class="${st.turns === v ? 'sel' : ''}" ${dis}>${n}<small>${v} Runden · ${d}</small></button>`).join('')}</div>
+      <div class="seg">${[[6, 'Quickie', '~5 Min'], [10, 'Normal', '~10 Min'], [15, 'Lang', '~15 Min'], [25, 'Marathon', '~25 Min'], [50, 'Mega', '~45 Min']].map(([v, n, d]) => `<button data-t="${v}" class="${st.turns === v ? 'sel' : ''}" ${dis}>${n}<small>${v} Runden · ${d}</small></button>`).join('')}</div>
       <div class="label">Wer gewinnt?</div>
-      <div class="seg two">${[['points', '🏆 Punkte-Sieg', 'Meiste Punkte nach allen Runden'], ['vault', '🔐 Tresor-Rennen', `Wer zuerst ${VAULT_GOAL} Tresore knackt (je 3/3 richtig), gewinnt sofort`]].map(([k, n, d]) => `<button data-win="${k}" class="${(st.win || 'points') === k ? 'sel' : ''}" ${dis}>${n}<small>${d}</small></button>`).join('')}</div>
+      <div class="seg two">${[['points', '🏆 Punkte-Sieg', 'Meiste Punkte nach allen Runden'], ['vault', '🔐 Tresor-Rennen', `Zuerst ${VAULT_GOAL} Tresore knacken`]].map(([k, n, d]) => `<button data-win="${k}" class="${(st.win || 'points') === k ? 'sel' : ''}" ${dis}>${n}<small>${d}</small></button>`).join('')}</div>
       <div class="label">Würfel-Design</div>
       <div class="chips">${Object.entries(DICE).map(([k, n]) => `<button class="chip look ${(st.dice || 'classic') === k ? 'on' : ''}" data-dice="${k}" ${dis}>${n}</button>`).join('')}</div>
       <div class="label">Hintergrund & Spielfeld</div>
@@ -313,8 +327,8 @@ function renderLobby(s) {
     $$('[data-mode]', el).forEach(b => b.onclick = () => set({ mode: b.dataset.mode }));
     $$('[data-rel]', el).forEach(b => b.onclick = () => set({ relation: b.dataset.rel }));
     $$('[data-win]', el).forEach(b => b.onclick = () => set({ win: b.dataset.win }));
-    $$('[data-dice]', el).forEach(b => b.onclick = () => set({ dice: b.dataset.dice }));
-    $$('[data-theme]', el).forEach(b => b.onclick = () => set({ theme: b.dataset.theme }));
+    $$('[data-dice]', el).forEach(b => b.onclick = () => { lookPreview('dice', b.dataset.dice); set({ dice: b.dataset.dice }); });
+    $$('[data-theme]', el).forEach(b => b.onclick = () => { lookPreview('theme', b.dataset.theme); set({ theme: b.dataset.theme }); });
     $$('[data-kick]', el).forEach(b => b.onclick = () => { if (confirm('Spieler aus der Lobby entfernen?')) act({ type: 'kick', i: +b.dataset.kick }); });
     $$('.chip[data-cat]', el).forEach(b => b.onclick = () => { const c = b.dataset.cat, cur = st.custom.slice(); set({ custom: cur.includes(c) ? cur.filter(x => x !== c) : cur.concat(c) }); });
     const sb = $('#start', el); if (sb) sb.onclick = () => { Sound.fanfare(); C.lobbyAnimDone = false; act({ type: 'start' }); };
@@ -399,7 +413,7 @@ function setDice(vals, spin) {
     const d = $('#dice' + i); if (!d) return;
     const r = DICE_ROT[vals[i]] || [0, 0], k = C.diceSpin * 360 + (i ? 360 : 0);
     d.style.transition = spin ? 'transform 1.35s cubic-bezier(.15,.75,.25,1)' : 'none';
-    d.style.transform = `rotateX(${r[0] + k}deg) rotateY(${r[1] + k + (i ? 12 : -10)}deg)`;
+    d.style.transform = `rotateX(${r[0] + k}deg) rotateY(${r[1] + k}deg)`;
   });
 }
 function diceHome(i) {
@@ -463,21 +477,32 @@ function placeTokens(force) {
     tk.style.transform = `translate3d(${x}px,${y}px,2px)`;
   });
 }
+// Figur hüpft weich von Feld zu Feld: Gleiten auf dem Brett + echter Sprung nach oben (WAAPI, GPU-freundlich)
 async function animateMove(st) {
-  const p = st.p, tk = $('#tk' + p);
+  const p = st.p, tk = $('#tk' + p); if (!tk) return;
   C.anim[p] = { cur: st.from };
+  const hop = $('.hopper', tk), sh = $('.tshadow', tk);
+  let [x0, y0] = tokenXY(p, st.from);
+  tk.style.transition = 'none';
   for (let k = 1; k <= st.steps; k++) {
-    if (!C.anim[p] || !tk) return;
+    if (!C.anim[p]) break;
     const pos = st.path[k]; C.anim[p].cur = pos;
     const [x, y] = tokenXY(p, pos);
+    const a = tk.animate([{ transform: `translate3d(${x0}px,${y0}px,2px)` }, { transform: `translate3d(${x}px,${y}px,2px)` }], { duration: 300, easing: 'cubic-bezier(.45,0,.55,1)' });
     tk.style.transform = `translate3d(${x}px,${y}px,2px)`;
-    tk.classList.remove('hop'); void tk.offsetWidth; tk.classList.add('hop');
-    Sound.hop(); vibrate(8);
-    const f = $('#f' + pos); if (f) { f.classList.remove('stomp'); void f.offsetWidth; f.classList.add('stomp'); }
-    await sleep(300);
+    if (hop) hop.animate([
+      { transform: 'translateY(0) scale(1.05,.94)', easing: 'cubic-bezier(.2,.7,.4,1)' },
+      { transform: 'translateY(-42%) scale(.97,1.04)', offset: .48, easing: 'cubic-bezier(.6,0,.8,.4)' },
+      { transform: 'translateY(0) scale(1.06,.93)', offset: .9 },
+      { transform: 'none' }], { duration: 300 });
+    if (sh) sh.animate([{ transform: 'translateZ(1px)', opacity: 1 }, { transform: 'translateZ(1px) scale(.55)', opacity: .45, offset: .48 }, { transform: 'translateZ(1px)', opacity: 1 }], { duration: 300 });
+    if (k === 1 || k === st.steps || k % 2) Sound.hop();
+    if (k === st.steps) vibrate(10);
+    await a.finished.catch(() => {});
+    x0 = x; y0 = y;
   }
+  tk.style.transition = '';
   delete C.anim[p];
-  if (tk) tk.classList.remove('hop');
   placeTokens();
 }
 

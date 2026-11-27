@@ -315,7 +315,7 @@ class HostGame {
     return best;
   }
   sortQ(cat) { const r = this.draw('sort_' + cat, Q.sort[cat]); const opts = shuffle(r[1]); return { kind: 'sort', text: r[0], options: opts, answer: r[1].map(x => opts.indexOf(x)), top: r[2] || null, cat }; }
-  mcQ(cat) { if (Q.sort && Q.sort[cat] && Q.sort[cat].length && Math.random() < .2) return this.sortQ(cat); const r = this.draw('mc_' + cat, Q.mc[cat]); const opts = shuffle(r.slice(1)); return { kind: 'mc', text: r[0], options: opts, answer: opts.indexOf(r[1]), cat }; }
+  mcQ(cat) { this.sinceSort = (this.sinceSort ?? 3) + 1; if (this.sinceSort >= 8 && Q.sort && Q.sort[cat] && Q.sort[cat].length && Math.random() < .4) { this.sinceSort = 0; return this.sortQ(cat); } const r = this.draw('mc_' + cat, Q.mc[cat]); const opts = shuffle(r.slice(1)); return { kind: 'mc', text: r[0], options: opts, answer: opts.indexOf(r[1]), cat }; }
   tfQ() { const r = this.draw('tf', Q.tf); return { kind: 'tf', text: r[0], options: ['Wahr', 'Falsch'], answer: r[1] ? 0 : 1 }; }
   async ask(q, o = {}) {
     const dur = (o.dur || 15) + (q.kind === 'sort' ? 10 : 0), mult = this.mult(), n = this.np, pl = this.s.players;
@@ -406,7 +406,7 @@ class HostGame {
   }
   async keyQuestion(p, cat, idx, intro) {
     const pl = this.s.players[p], k = keyCount(pl, cat), full = k >= KEYS_NEEDED || pl.crowns[cat];
-    await this.intro({ p, field: idx, cat, catIntro: true, anim: rand(4), icon: CATS[cat].i, title: CATS[cat].n, keyNo: full ? null : k + 1, sub: intro || (full ? (pl.crowns[cat] ? 'Tresor schon geknackt – Punkte-Duell!' : 'Schlüsselbund voll – ab in den Tresorraum! Jetzt: Punkte-Duell.') : `Richtig = Schlüssel ${k + 1}/${KEYS_NEEDED} für ${pl.name}`) }, intro ? 2600 : 1500);
+    await this.intro({ p, field: idx, cat, catIntro: true, anim: rand(4), icon: CATS[cat].i, title: CATS[cat].n, keyNo: full ? null : k + 1, sub: intro || (full ? (pl.crowns[cat] ? 'Tresor schon geknackt – Punkte-Duell!' : 'Schlüsselbund voll – ab in den Tresorraum! Jetzt: Punkte-Duell.') : `Richtig = Schlüssel ${k + 1}/${KEYS_NEEDED} für ${pl.name}`) }, intro ? 2800 : 1900);
     const r = await this.ask(this.mcQ(cat), { dur: 15, mover: p, keyFor: full ? null : p, keyNo: full ? null : k + 1 });
     if (r.correct[p] && !full) { this.giveKey(p, cat); await sleep(1300); }
   }
