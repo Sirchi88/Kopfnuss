@@ -777,3 +777,13 @@ body[data-theme]:not([data-theme="neon"]) .grid-floor{opacity:.25;}
 body[data-scr="lobby"] .chatbtn{top:calc(var(--safe-top) + 12px);right:calc(max(16px,calc(50vw - 244px)) + 56px);}
 body[data-scr="lobby"] .chatpanel{top:calc(var(--safe-top) + 60px);}
 body[data-scr="lobby"] .chatpop{top:calc(var(--safe-top) + 58px);right:max(8px,calc(50vw - 252px));}
+
+/* ---------- Weihnachts-Look ---------- */
+#snow{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;}
+.nut{position:relative;}
+.xhat{display:none;}
+body.xmas .xhat{display:block;position:absolute;left:50%;top:-34%;width:78%;height:62%;transform:translateX(-46%) rotate(-12deg);background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 80'><path d='M14 62 C26 30 52 6 86 22 C70 26 64 40 66 62 Z' fill='%23e8202e' stroke='%230b0220' stroke-width='4' stroke-linejoin='round'/><path d='M30 34 C44 18 62 14 78 20' fill='none' stroke='%23ff6b74' stroke-width='5' stroke-linecap='round' opacity='.7'/><rect x='6' y='56' width='70' height='18' rx='9' fill='%23fff' stroke='%230b0220' stroke-width='4'/><circle cx='86' cy='24' r='10' fill='%23fff' stroke='%230b0220' stroke-width='4'/></svg>") center/contain no-repeat;z-index:2;filter:drop-shadow(0 4px 0 rgba(11,2,32,.5));}
+body.xmas .logo span:first-child{position:relative;}
+body.xmas .logo span:first-child::before{content:"";position:absolute;left:-18%;top:-52%;width:110%;height:70%;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 80'><path d='M14 62 C26 30 52 6 86 22 C70 26 64 40 66 62 Z' fill='%23e8202e' stroke='%230b0220' stroke-width='4' stroke-linejoin='round'/><path d='M30 34 C44 18 62 14 78 20' fill='none' stroke='%23ff6b74' stroke-width='5' stroke-linecap='round' opacity='.7'/><rect x='6' y='56' width='70' height='18' rx='9' fill='%23fff' stroke='%230b0220' stroke-width='4'/><circle cx='86' cy='24' r='10' fill='%23fff' stroke='%230b0220' stroke-width='4'/></svg>") center/contain no-repeat;transform:rotate(-14deg);z-index:2;}
+body.xmas .splash .tagline::after{content:" 🎄";}
+body.xmas .splash .logo span:first-child::before{display:none;}

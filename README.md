@@ -14,6 +14,8 @@ Ein schnelles, buntes Quiz-Brettspiel fürs Handy, inspiriert von Party-Quizspie
 - Für einen Sprach-Anruf: in WhatsApp unter *Anrufe → Anruf-Link erstellen* einen Link erzeugen und in der Lobby einfügen. Alle sehen dann „📞 Dem Anruf beitreten“. Der Anruf läuft im Hintergrund weiter.
 - Über die kleine 💬-Blase könnt ihr euch in Lobby und Spiel kurze Nachrichten und Schnell-Antworten schicken.
 
+**🎄 Weihnachts-Look:** Leichter Schneefall und Mütze fürs Hirn. Im Dezember automatisch an, unter ⚙️ Einstellungen abschaltbar.
+
 **Allein reinschnuppern:** Mit „🤖 Übungsspiel gegen den Computer“ spielst du gegen Robo. Übungsspiele zählen nicht in die Statistik.
 
 **Tipp:** Über „Teilen“ → „Zum Home-Bildschirm“ wird KOPFNUSS wie eine echte App gestartet.

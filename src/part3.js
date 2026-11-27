@@ -48,6 +48,38 @@ function lookPreview(kind, val) {
   C.lookT = setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, 1500);
   el.onclick = () => el.remove();
 }
+/* ---------- Weihnachts-Look: Mütze + leichter Schnee (abschaltbar) ---------- */
+const SNOW = { on: false, raf: 0, flakes: [], cv: null, last: 0 };
+function applyXmas() {
+  document.body.classList.toggle('xmas', !!PREFS.xmas);
+  if (PREFS.xmas && !SNOW.on) startSnow(); else if (!PREFS.xmas && SNOW.on) stopSnow();
+}
+function startSnow() {
+  SNOW.on = true;
+  if (!SNOW.cv) { SNOW.cv = document.createElement('canvas'); SNOW.cv.id = 'snow'; document.body.insertBefore(SNOW.cv, $('#app')); }
+  const cv = SNOW.cv, dpr = Math.min(2, devicePixelRatio || 1);
+  const size = () => { cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; };
+  size(); SNOW.size = size; addEventListener('resize', size);
+  const n = Math.round(Math.min(60, innerWidth / 9));
+  SNOW.flakes = Array.from({ length: n }, () => ({ x: Math.random(), y: Math.random(), r: .8 + Math.random() * 2.2, v: .015 + Math.random() * .03, w: Math.random() * 6.28, a: .35 + Math.random() * .5 }));
+  cv.style.display = '';
+  const ctx = cv.getContext('2d');
+  const loop = t => {
+    if (!SNOW.on) return;
+    SNOW.raf = requestAnimationFrame(loop);
+    if (document.hidden || t - SNOW.last < 33) return; // ~30 fps reicht für Schnee
+    const dt = Math.min(.1, (t - (SNOW.last || t)) / 1000); SNOW.last = t;
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = '#fff';
+    for (const f of SNOW.flakes) {
+      f.y += f.v * dt * (1 + f.r * .3); f.w += dt * .8; f.x += Math.sin(f.w) * .0006;
+      if (f.y > 1.02) { f.y = -.02; f.x = Math.random(); }
+      ctx.globalAlpha = f.a; ctx.beginPath(); ctx.arc(f.x * W, f.y * H, f.r * dpr, 0, 6.283); ctx.fill();
+    }
+  };
+  SNOW.raf = requestAnimationFrame(loop);
+}
+function stopSnow() { SNOW.on = false; cancelAnimationFrame(SNOW.raf); if (SNOW.cv) SNOW.cv.style.display = 'none'; if (SNOW.size) removeEventListener('resize', SNOW.size); }
 function applyLook(st) {
   document.body.dataset.theme = (st && st.theme) || 'neon';
   document.body.dataset.dice = (st && st.dice) || 'classic';
@@ -68,7 +100,7 @@ function setScreen(name, html) { C.screen = name; chatShow(name === 'lobby' || n
 const logoHTML = (cls = '') => `<div class="logo ${cls}">${'KOPFNUSS'.split('').map((l, i) => `<span style="animation-delay:${i * 60}ms">${l}</span>`).join('')}</div>`;
 
 function showSplash() {
-  const el = setScreen('splash', `<div class="rays"></div><div class="nut">🧠</div>${logoHTML()}<div><span class="tagline">Das Quiz-Duell für 2–4</span></div><div class="spacer" style="flex:0 0 30px"></div><div class="tap">👆 Tippen zum Starten</div>`);
+  const el = setScreen('splash', `<div class="rays"></div><div class="nut"><span class="xhat"></span>🧠</div>${logoHTML()}<div><span class="tagline">Das Quiz-Duell für 2–4</span></div><div class="spacer" style="flex:0 0 30px"></div><div class="tap">👆 Tippen zum Starten</div>`);
   el.addEventListener('click', () => { Sound.init(); Sound.whoosh(); const code = (PARAMS.get('join') || '').toUpperCase(); code && P.name ? showJoin(code) : showHome(); }, { once: true });
 }
 
@@ -126,8 +158,9 @@ function showPrefs() {
   const row = (k, l, d) => `<div class="prefrow"><div><b>${l}</b><small>${d}</small></div><button class="toggle ${PREFS[k] ? 'on' : ''}" data-k="${k}"><i></i></button></div>`;
   const panel = openSheet(`<div class="qhead"><span class="pill" style="--cc:var(--cyan)">⚙️ Einstellungen</span><div class="spacer"></div><button class="iconbtn" id="closeP">✕</button></div>
     ${row('names', 'Namen unter den Emojis', 'Bei der Auflösung steht klein der Name unter jedem Spieler-Emoji')}
+    ${row('xmas', '🎄 Weihnachts-Look', 'Leichter Schneefall im Hintergrund & Mütze fürs Hirn')}
     <button class="btn" id="okP" style="margin-top:16px">Fertig</button>`, '#22d3ff');
-  $$('.toggle', panel).forEach(b => b.onclick = () => { const k = b.dataset.k; PREFS[k] = !PREFS[k]; store.set('kn_prefs', PREFS); b.classList.toggle('on', PREFS[k]); Sound.click(); });
+  $$('.toggle', panel).forEach(b => b.onclick = () => { const k = b.dataset.k; PREFS[k] = !PREFS[k]; store.set('kn_prefs', PREFS); b.classList.toggle('on', PREFS[k]); Sound.click(); if (k === 'xmas') applyXmas(); });
   $('#closeP').onclick = $('#okP').onclick = () => { Sound.click(); closeSheet(); };
 }
 
@@ -1211,6 +1244,7 @@ document.documentElement.style.setProperty('--tilt', TILT + 'deg');
 document.body.insertAdjacentHTML('beforeend', '<div class="desk-hint">📱 KOPFNUSS ist fürs Handy gemacht – am besten dort öffnen.</div>');
 window.addEventListener('beforeunload', e => { if (C.screen === 'game' && C.s && C.s.stage.type !== 'end') { e.preventDefault(); e.returnValue = ''; } });
 applyLook(null);
+applyXmas();
 showSplash();
 window.__KN = { C, startHost, joinGame, showHome, P, PREFS, saveProfile, buildBoard };
 })();

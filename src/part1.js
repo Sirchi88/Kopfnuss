@@ -183,7 +183,8 @@ function loadProfile() {
   return p;
 }
 const P = loadProfile();
-const PREFS = Object.assign({ names: true }, store.get('kn_prefs', {}));
+const XMAS_SEASON = (() => { const d = new Date(), m = d.getMonth(), t = d.getDate(); return m === 11 || (m === 10 && t >= 20) || (m === 0 && t <= 6); })();
+const PREFS = Object.assign({ names: true, xmas: XMAS_SEASON }, store.get('kn_prefs', {}));
 function saveProfile() { store.set('kn_profile', { name: P.name, head: P.head, body: P.body, color: P.color, hat: P.hat || '', glasses: P.glasses || '', aura: P.aura || '' }); }
 const profileOf = () => ({ name: P.name, head: P.head, body: P.body, color: P.color, hat: P.hat || '', glasses: P.glasses || '', aura: P.aura || '', pid: P.pid });
 const STATS0 = { games: 0, wins: 0, losses: 0, draws: 0, points: 0, best: 0, right: 0, ans: 0, crowns: 0, laughs: 0, bruller: 0, cat: {}, vs: {}, recent: [], done: [] };
